@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Planner</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23ffffff%22 stroke=%22%23161512%22 stroke-width=%224%22/><text x=%2250%22 y=%2268%22 font-size=%2258%22 text-anchor=%22middle%22 fill=%22%23161512%22 font-family=%22serif%22>P</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">✦</span>
+      <h1>The Day</h1>
+    </div>
+    <div class="header-date" id="header-date"></div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="schedule">Schedule</button>
+    <button class="tab-btn" data-tab="habits">Habits</button>
+    <button class="tab-btn" data-tab="assignments">Assignments</button>
+  </nav>
+
+  <main class="tab-panels">
+
+    <!-- SCHEDULE -->
+    <section class="panel active" id="panel-schedule">
+
+      <div class="schedule-controls">
+        <div class="view-switcher" id="view-switcher">
+          <button class="view-btn active" data-view="day">Day</button>
+          <button class="view-btn" data-view="week">Week</button>
+          <button class="view-btn" data-view="month">Month</button>
+          <button class="view-btn" data-view="year">Year</button>
+        </div>
+
+        <div class="date-nav">
+          <button class="nav-arrow" id="sched-prev" aria-label="Previous">‹</button>
+          <div class="date-nav-label">
+            <span id="sched-date-label"></span>
+            <button class="btn-link" id="sched-today-btn" hidden>Jump to today</button>
+          </div>
+          <button class="nav-arrow" id="sched-next" aria-label="Next">›</button>
+        </div>
+      </div>
+
+      <!-- Day view -->
+      <div class="schedule-view schedule-view-narrow" id="view-day">
+        <div class="view-day-head">
+          <button class="btn-ghost" id="add-block-btn">+ Add Block</button>
+        </div>
+        <div class="schedule-list" id="schedule-list"></div>
+      </div>
+
+      <!-- Week view -->
+      <div class="schedule-view" id="view-week" hidden>
+        <div class="week-grid" id="week-grid"></div>
+      </div>
+
+      <!-- Month view -->
+      <div class="schedule-view" id="view-month" hidden>
+        <div class="month-weekday-row" id="month-weekday-row"></div>
+        <div class="month-grid" id="month-grid"></div>
+      </div>
+
+      <!-- Year view -->
+      <div class="schedule-view" id="view-year" hidden>
+        <div class="year-grid" id="year-grid"></div>
+      </div>
+
+    </section>
+
+    <!-- HABITS -->
+    <section class="panel" id="panel-habits">
+      <div class="panel-head">
+        <h2>Habits</h2>
+      </div>
+
+      <form class="habit-form" id="habit-form">
+        <input type="text" id="habit-name-input" placeholder="New habit" required>
+        <div class="habit-form-freq">
+          <select id="habit-freq-type" class="freq-select">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+          <div class="freq-count-wrap" id="habit-freq-count-wrap" hidden>
+            <input type="number" id="habit-freq-count" min="1" max="6" value="1">
+            <span class="freq-suffix">× / week</span>
+          </div>
+        </div>
+        <button type="submit" class="btn-solid">Add Habit</button>
+      </form>
+
+      <div class="date-nav">
+        <button class="nav-arrow" id="date-prev" aria-label="Previous day">‹</button>
+        <div class="date-nav-label">
+          <span id="viewed-date-label">Today</span>
+          <button class="btn-link" id="date-today-btn" hidden>Jump to today</button>
+        </div>
+        <button class="nav-arrow" id="date-next" aria-label="Next day">›</button>
+      </div>
+
+      <div class="habits-list" id="habits-list"></div>
+    </section>
+
+    <!-- ASSIGNMENTS -->
+    <section class="panel" id="panel-assignments">
+      <div class="panel-head">
+        <h2>Assignments</h2>
+      </div>
+
+      <form class="assignment-form" id="assignment-form">
+        <input type="text" id="assign-title" placeholder="Assignment title" required>
+        <div class="assignment-form-row">
+          <input type="text" id="assign-course" placeholder="Course" required>
+          <input type="date" id="assign-due" required>
+        </div>
+        <button type="submit" class="btn-solid">Add Assignment</button>
+      </form>
+
+      <div class="assignments-list" id="assignments-list"></div>
+    </section>
+
+  </main>
+</div>
+
+<template id="tpl-schedule-row">
+  <div class="schedule-row" data-id="">
+    <div class="schedule-time">
+      <input type="time" class="sr-start" value="">
+      <span class="sr-dash">–</span>
+      <input type="time" class="sr-end" value="">
+    </div>
+    <input type="text" class="sr-label" placeholder="Block label" value="">
+    <button class="sr-delete" aria-label="Delete block">×</button>
+  </div>
+</template>
+
+<template id="tpl-week-day">
+  <div class="week-day">
+    <button type="button" class="week-day-header">
+      <span class="week-day-name"></span>
+      <span class="week-day-num"></span>
+    </button>
+    <div class="week-day-blocks"></div>
+  </div>
+</template>
+
+<template id="tpl-month-cell">
+  <button type="button" class="month-cell">
+    <span class="month-cell-num"></span>
+    <span class="month-cell-dot"></span>
+  </button>
+</template>
+
+<template id="tpl-mini-month">
+  <div class="mini-month">
+    <button type="button" class="mini-month-title"></button>
+    <div class="mini-month-weekdays"></div>
+    <div class="mini-month-grid"></div>
+  </div>
+</template>
+
+<template id="tpl-habit-card">
+  <div class="habit-card" data-id="">
+    <div class="habit-card-top">
+      <label class="habit-check">
+        <input type="checkbox" class="habit-checkbox">
+        <span class="habit-check-mark"></span>
+      </label>
+      <div class="habit-card-info">
+        <div class="habit-display">
+          <span class="habit-name"></span>
+          <span class="habit-freq-badge"></span>
+        </div>
+        <div class="habit-edit-fields" hidden>
+          <input type="text" class="habit-edit-name" placeholder="Habit name">
+          <div class="habit-edit-freq-row">
+            <select class="habit-edit-freq-type freq-select">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <div class="freq-count-wrap habit-edit-freq-count-wrap">
+              <input type="number" class="habit-edit-freq-count" min="1" max="6">
+              <span class="freq-suffix">× / week</span>
+            </div>
+          </div>
+        </div>
+        <span class="habit-stat"></span>
+        <span class="habit-substat"></span>
+      </div>
+      <div class="habit-card-actions">
+        <div class="habit-actions-view">
+          <button type="button" class="habit-edit-btn">Edit</button>
+          <button type="button" class="habit-delete-btn">Delete</button>
+        </div>
+        <div class="habit-actions-edit" hidden>
+          <button type="button" class="habit-save-btn">Save</button>
+          <button type="button" class="habit-cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div class="habit-grid"></div>
+  </div>
+</template>
+
+<template id="tpl-assignment-row">
+  <div class="assignment-row" data-id="">
+    <label class="habit-check assignment-check">
+      <input type="checkbox" class="assign-checkbox">
+      <span class="habit-check-mark"></span>
+    </label>
+    <div class="assignment-info">
+      <span class="assignment-title"></span>
+      <span class="assignment-meta"></span>
+    </div>
+    <button class="assign-delete" aria-label="Delete assignment">×</button>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
