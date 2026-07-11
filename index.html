@@ -139,9 +139,12 @@
     <section class="panel" id="panel-assignments">
       <div class="panel-head">
         <h2>Assignments</h2>
-        <div class="view-switcher view-switcher-sm" id="assignments-view-switcher">
-          <button class="view-btn active" data-aview="list">List</button>
-          <button class="view-btn" data-aview="status">By Status</button>
+        <div class="panel-head-actions">
+          <button type="button" class="btn-ghost" id="import-canvas-btn">Import from Canvas</button>
+          <div class="view-switcher view-switcher-sm" id="assignments-view-switcher">
+            <button class="view-btn active" data-aview="list">List</button>
+            <button class="view-btn" data-aview="status">By Status</button>
+          </div>
         </div>
       </div>
 
@@ -261,6 +264,53 @@
     </form>
   </div>
 </div>
+
+<!-- Import from Canvas modal -->
+<div class="modal-overlay" id="import-modal-overlay" hidden>
+  <div class="modal import-modal" role="dialog" aria-modal="true" aria-label="Import assignments">
+    <button type="button" class="modal-close" id="import-close-btn" aria-label="Close">×</button>
+
+    <div id="import-step-paste">
+      <h3 class="import-title">Import from Canvas</h3>
+      <p class="import-help">Go to your Canvas dashboard or an assignments list, select the text, copy it, and paste it below. This reads titles, courses, and due dates from the pasted text — nothing is sent anywhere.</p>
+      <textarea id="import-paste-area" rows="10" placeholder="Paste your Canvas assignment list here…"></textarea>
+      <div class="ev-footer">
+        <span></span>
+        <div class="ev-footer-right">
+          <button type="button" class="btn-text" id="import-cancel-btn">Cancel</button>
+          <button type="button" class="btn-solid import-parse-btn" id="import-parse-btn">Parse Text</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="import-step-review" hidden>
+      <h3 class="import-title">Review before importing</h3>
+      <p class="import-help" id="import-review-summary"></p>
+      <div class="import-review-list" id="import-review-list"></div>
+      <div class="ev-footer">
+        <button type="button" class="btn-text" id="import-back-btn">Back</button>
+        <div class="ev-footer-right">
+          <button type="button" class="btn-text" id="import-cancel-btn-2">Cancel</button>
+          <button type="button" class="btn-solid import-commit-btn" id="import-commit-btn">Import Selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<template id="tpl-import-row">
+  <div class="import-row">
+    <input type="checkbox" class="import-row-check" checked>
+    <div class="import-row-fields">
+      <input type="text" class="import-row-title" placeholder="Assignment title">
+      <div class="import-row-fields-sub">
+        <input type="text" class="import-row-course" placeholder="Course">
+        <input type="date" class="import-row-due">
+      </div>
+      <span class="import-row-flag" hidden>Couldn't find a due date — check this one</span>
+    </div>
+  </div>
+</template>
 
 <template id="tpl-day-event">
   <button type="button" class="day-event">

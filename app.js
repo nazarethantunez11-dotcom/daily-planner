@@ -187,6 +187,112 @@
   function formatDueDate(key) {
     return fromDateKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
+
+  // ---------- Canvas paste-import parser ----------
+  const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const IMPORT_JUNK_LINE_RE = /^(\d+\s*(pts?|points?)$|not yet graded|graded|missing|submitted|late|excused|no submission|this assignment|available (until|from)|closed|due date|multiple due dates|\d+\s*\/\s*\d+$)/i;
+
+  function parseDateFromLine(line, todayDate) {
+    const monthRe = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+    const re1 = new RegExp(monthRe + '\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?', 'i');
+    const m1 = line.match(re1);
+    if (m1) {
+      const monthIdx = MONTH_ABBR.findIndex(mo => m1[1].toLowerCase().startsWith(mo));
+      const day = parseInt(m1[2], 10);
+      if (monthIdx >= 0 && day >= 1 && day <= 31) {
+        const year = m1[3] ? parseInt(m1[3], 10) : todayDate.getFullYear();
+        let candidate = new Date(year, monthIdx, day);
+        if (!m1[3]) {
+          const fourMonthsAgo = new Date(todayDate);
+          fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
+          if (candidate < fourMonthsAgo) candidate = new Date(year + 1, monthIdx, day);
+        }
+        return toDateKey(candidate);
+      }
+    }
+    const re2 = /\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/;
+    const m2 = line.match(re2);
+    if (m2) {
+      let year = parseInt(m2[3], 10); if (year < 100) year += 2000;
+      const month = parseInt(m2[1], 10) - 1, day = parseInt(m2[2], 10);
+      if (month >= 0 && month <= 11 && day >= 1 && day <= 31) return toDateKey(new Date(year, month, day));
+    }
+    const re3 = /\b(\d{4})-(\d{2})-(\d{2})\b/;
+    const m3 = line.match(re3);
+    if (m3) return `${m3[1]}-${m3[2]}-${m3[3]}`;
+    return null;
+  }
+
+  function isImportJunkLine(line) {
+    if (!line) return true;
+    if (IMPORT_JUNK_LINE_RE.test(line.trim())) return true;
+    if (/^[-–—•*]+$/.test(line.trim())) return true;
+    return false;
+  }
+
+  function parseCanvasText(text) {
+    const rawLines = text.split(/\r?\n/).map(l => l.trim());
+    const today = new Date();
+    const results = [];
+
+    const blocks = [];
+    let current = [];
+    rawLines.forEach(line => {
+      if (line === '') {
+        if (current.length) blocks.push(current);
+        current = [];
+      } else {
+        current.push(line);
+      }
+    });
+    if (current.length) blocks.push(current);
+
+    const useBlocks = blocks.length > 1 && blocks.every(b => b.length <= 6);
+
+    if (useBlocks) {
+      blocks.forEach(block => {
+        let dueDate = null, dateLineIdx = -1;
+        block.forEach((line, i) => {
+          if (dueDate) return;
+          const d = parseDateFromLine(line, today);
+          if (d) { dueDate = d; dateLineIdx = i; }
+        });
+        const candidateLines = block.filter((line, i) => i !== dateLineIdx && !isImportJunkLine(line));
+        if (candidateLines.length === 0 && !dueDate) return;
+        const title = candidateLines[0] || '';
+        const course = candidateLines[1] || '';
+        if (!title) return;
+        results.push({ title, course, dueDate, needsAttention: !dueDate });
+      });
+    } else {
+      let lastNonJunk = null, lastNonJunk2 = null;
+      rawLines.forEach(line => {
+        if (!line) return;
+        const d = parseDateFromLine(line, today);
+        if (d && lastNonJunk) {
+          // Canvas's dense listings read Title, then Course, then Date — so of the
+          // two most recent non-junk lines, the earlier one is the title.
+          const title = lastNonJunk2 || lastNonJunk;
+          const course = lastNonJunk2 ? lastNonJunk : '';
+          results.push({ title, course, dueDate: d, needsAttention: false });
+          lastNonJunk = null; lastNonJunk2 = null;
+          return;
+        }
+        if (!isImportJunkLine(line)) {
+          lastNonJunk2 = lastNonJunk;
+          lastNonJunk = line;
+        }
+      });
+    }
+
+    const seen = new Set();
+    return results.filter(r => {
+      const key = `${r.title}|${r.dueDate}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
   function minutesFromHHMM(hhmm) {
     const [h, m] = hhmm.split(':').map(Number);
     return h * 60 + m;
@@ -1717,6 +1823,83 @@
     assignRemindLead.hidden = true;
     renderAssignments();
     assignTitleInput.focus();
+  });
+
+  // ---- Import from Canvas ----
+  const importOverlay = document.getElementById('import-modal-overlay');
+  const importCloseBtn = document.getElementById('import-close-btn');
+  const importCancelBtn = document.getElementById('import-cancel-btn');
+  const importCancelBtn2 = document.getElementById('import-cancel-btn-2');
+  const importParseBtn = document.getElementById('import-parse-btn');
+  const importBackBtn = document.getElementById('import-back-btn');
+  const importCommitBtn = document.getElementById('import-commit-btn');
+  const importPasteArea = document.getElementById('import-paste-area');
+  const importStepPaste = document.getElementById('import-step-paste');
+  const importStepReview = document.getElementById('import-step-review');
+  const importReviewList = document.getElementById('import-review-list');
+  const importReviewSummary = document.getElementById('import-review-summary');
+  const importRowTpl = document.getElementById('tpl-import-row');
+
+  function closeImportModal() {
+    importOverlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('import-canvas-btn').addEventListener('click', () => {
+    importPasteArea.value = '';
+    importStepPaste.hidden = false;
+    importStepReview.hidden = true;
+    importOverlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => importPasteArea.focus(), 30);
+  });
+  importCloseBtn.addEventListener('click', closeImportModal);
+  importCancelBtn.addEventListener('click', closeImportModal);
+  importCancelBtn2.addEventListener('click', closeImportModal);
+  importOverlay.addEventListener('click', e => { if (e.target === importOverlay) closeImportModal(); });
+
+  importParseBtn.addEventListener('click', () => {
+    const parsed = parseCanvasText(importPasteArea.value);
+    if (parsed.length === 0) {
+      alert("Couldn't find any assignments in that text. Try pasting a bit more — a title, course, and due date line for each assignment works best.");
+      return;
+    }
+    importReviewSummary.textContent = `Found ${parsed.length} possible assignment${parsed.length === 1 ? '' : 's'}. Review and edit before importing — anything unchecked won't be added.`;
+    importReviewList.innerHTML = '';
+    parsed.forEach(item => {
+      const node = importRowTpl.content.firstElementChild.cloneNode(true);
+      node.classList.toggle('needs-attention', item.needsAttention);
+      node.querySelector('.import-row-title').value = item.title;
+      node.querySelector('.import-row-course').value = item.course;
+      node.querySelector('.import-row-due').value = item.dueDate || '';
+      node.querySelector('.import-row-flag').hidden = !item.needsAttention;
+      importReviewList.appendChild(node);
+    });
+    importStepPaste.hidden = true;
+    importStepReview.hidden = false;
+  });
+
+  importBackBtn.addEventListener('click', () => {
+    importStepPaste.hidden = false;
+    importStepReview.hidden = true;
+  });
+
+  importCommitBtn.addEventListener('click', () => {
+    const rows = Array.from(importReviewList.querySelectorAll('.import-row'));
+    let count = 0;
+    rows.forEach(row => {
+      if (!row.querySelector('.import-row-check').checked) return;
+      const title = row.querySelector('.import-row-title').value.trim();
+      const course = row.querySelector('.import-row-course').value.trim();
+      const dueDate = row.querySelector('.import-row-due').value;
+      if (!title || !dueDate) return;
+      state.assignments.push({ id: uid(), title, course: course || 'Imported', dueDate, done: false, link: '', attachment: null, color: null, reminder: { enabled: false, daysBefore: 0 } });
+      count++;
+    });
+    save();
+    renderAssignments();
+    closeImportModal();
+    showToast(count > 0 ? `Imported ${count} assignment${count === 1 ? '' : 's'}.` : 'Nothing imported — check the boxes for rows to include.');
   });
 
   // ---------- init ----------

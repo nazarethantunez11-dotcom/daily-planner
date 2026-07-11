@@ -159,6 +159,9 @@ html, body {
   flex-wrap: wrap;
 }
 
+.panel-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel-head-actions .view-switcher { margin-bottom: 0; }
+
 .panel-head h2 {
   font-family: var(--font-serif);
   font-size: 23px;
@@ -813,6 +816,61 @@ html, body {
 .ev-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .ev-footer-right { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .ev-save-btn { width: auto; padding: 10px 22px; }
+.ev-footer .btn-solid { width: auto; }
+
+/* ---------- Import modal ---------- */
+.import-modal { max-width: 560px; }
+.import-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+  padding-right: 24px;
+}
+.import-help { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin: 0 0 14px; }
+
+#import-paste-area {
+  width: 100%;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 10px 12px;
+  resize: vertical;
+  margin-bottom: 14px;
+}
+
+.import-review-list { display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto; margin-bottom: 14px; }
+
+.import-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.import-row-check { width: 16px; height: 16px; margin-top: 10px; accent-color: var(--ink); flex-shrink: 0; }
+.import-row-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.import-row-title, .import-row-course, .import-row-due {
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 7px 9px;
+  width: 100%;
+}
+.import-row-fields-sub { display: flex; gap: 6px; }
+.import-row-fields-sub .import-row-course { flex: 1; min-width: 0; }
+.import-row-fields-sub .import-row-due { flex-shrink: 0; width: 150px; }
+.import-row-flag { font-size: 11px; color: var(--danger); }
+.import-row.needs-attention { border-color: var(--danger); }
 
 /* Weekday chip picker (shared: event repeat + habit days) */
 .weekday-chip-row { display: flex; gap: 5px; }
