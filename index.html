@@ -54,14 +54,21 @@
       <!-- Day view -->
       <div class="schedule-view schedule-view-narrow" id="view-day">
         <div class="view-day-head">
-          <button class="btn-ghost" id="add-block-btn">+ Add Block</button>
+          <button class="btn-ghost" id="add-event-btn">+ Add Event</button>
         </div>
-        <div class="schedule-list" id="schedule-list"></div>
+        <div class="day-events-list" id="day-events-list"></div>
       </div>
 
       <!-- Week view -->
       <div class="schedule-view" id="view-week" hidden>
-        <div class="week-grid" id="week-grid"></div>
+        <div class="whg" id="week-hourgrid">
+          <div class="whg-header-row" id="week-header-row"></div>
+          <div class="whg-allday-row" id="week-allday-row"></div>
+          <div class="whg-body" id="week-body">
+            <div class="whg-gutter" id="week-gutter"></div>
+            <div class="whg-days" id="week-days"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Month view -->
@@ -88,13 +95,15 @@
         <div class="habit-form-freq">
           <select id="habit-freq-type" class="freq-select">
             <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
+            <option value="weekly">X times a week</option>
+            <option value="days">Specific days</option>
           </select>
           <div class="freq-count-wrap" id="habit-freq-count-wrap" hidden>
-            <input type="number" id="habit-freq-count" min="1" max="6" value="1">
+            <input type="number" id="habit-freq-count" min="1" max="7" value="1">
             <span class="freq-suffix">× / week</span>
           </div>
         </div>
+        <div class="freq-days-wrap" id="habit-freq-days-wrap" hidden></div>
         <button type="submit" class="btn-solid">Add Habit</button>
       </form>
 
@@ -114,6 +123,10 @@
     <section class="panel" id="panel-assignments">
       <div class="panel-head">
         <h2>Assignments</h2>
+        <div class="view-switcher view-switcher-sm" id="assignments-view-switcher">
+          <button class="view-btn active" data-aview="list">List</button>
+          <button class="view-btn" data-aview="status">By Status</button>
+        </div>
       </div>
 
       <form class="assignment-form" id="assignment-form">
@@ -122,41 +135,90 @@
           <input type="text" id="assign-course" placeholder="Course" required>
           <input type="date" id="assign-due" required>
         </div>
+        <div class="assignment-form-row">
+          <input type="url" id="assign-link" placeholder="Link (optional)">
+        </div>
+        <div class="assignment-form-attach">
+          <button type="button" class="btn-ghost" id="assign-file-btn">+ Attach file</button>
+          <input type="file" id="assign-file-input" hidden accept="application/pdf,.doc,.docx,.txt,image/*">
+          <span class="assign-file-name" id="assign-file-name"></span>
+          <button type="button" class="assign-file-clear" id="assign-file-clear" hidden aria-label="Remove attachment">×</button>
+        </div>
         <button type="submit" class="btn-solid">Add Assignment</button>
       </form>
 
       <div class="assignments-list" id="assignments-list"></div>
+      <div class="assignments-grouped" id="assignments-grouped" hidden></div>
     </section>
 
   </main>
 </div>
 
-<template id="tpl-schedule-row">
-  <div class="schedule-row" data-id="">
-    <div class="schedule-time">
-      <input type="time" class="sr-start" value="">
-      <span class="sr-dash">–</span>
-      <input type="time" class="sr-end" value="">
-    </div>
-    <input type="text" class="sr-label" placeholder="Block label" value="">
-    <button class="sr-delete" aria-label="Delete block">×</button>
-  </div>
-</template>
+<!-- Event modal -->
+<div class="modal-overlay" id="event-modal-overlay" hidden>
+  <div class="modal event-modal" role="dialog" aria-modal="true" aria-label="Event details">
+    <button type="button" class="modal-close" id="ev-close-btn" aria-label="Close">×</button>
+    <form id="event-form">
+      <input type="text" id="ev-title" class="ev-title-input" placeholder="Add title" required>
 
-<template id="tpl-week-day">
-  <div class="week-day">
-    <button type="button" class="week-day-header">
-      <span class="week-day-name"></span>
-      <span class="week-day-num"></span>
-    </button>
-    <div class="week-day-blocks"></div>
-  </div>
-</template>
+      <div class="ev-field-row">
+        <input type="date" id="ev-date" required>
+        <label class="ev-allday-toggle">
+          <input type="checkbox" id="ev-allday">
+          <span>All day</span>
+        </label>
+      </div>
 
-<template id="tpl-month-cell">
-  <button type="button" class="month-cell">
-    <span class="month-cell-num"></span>
-    <span class="month-cell-dot"></span>
+      <div class="ev-field-row" id="ev-time-row">
+        <input type="time" id="ev-start">
+        <span class="ev-time-sep">to</span>
+        <input type="time" id="ev-end">
+      </div>
+
+      <div class="ev-field-block">
+        <label class="ev-label" for="ev-repeat">Repeat</label>
+        <select id="ev-repeat"></select>
+        <div class="ev-repeat-chips" id="ev-repeat-chips" hidden></div>
+      </div>
+
+      <div class="ev-field-block">
+        <label class="ev-label" for="ev-location">Location</label>
+        <input type="text" id="ev-location" placeholder="Optional">
+      </div>
+
+      <div class="ev-field-block">
+        <label class="ev-label" for="ev-description">Description</label>
+        <textarea id="ev-description" rows="3" placeholder="Notes, links, details…"></textarea>
+      </div>
+
+      <div class="ev-delete-confirm" id="ev-delete-confirm" hidden>
+        <span>Delete this event:</span>
+        <div class="ev-delete-confirm-btns">
+          <button type="button" class="btn-text" id="ev-delete-day-btn">This day only</button>
+          <button type="button" class="btn-text danger" id="ev-delete-all-btn">Entire series</button>
+          <button type="button" class="btn-text" id="ev-delete-back-btn">Back</button>
+        </div>
+      </div>
+
+      <div class="ev-footer" id="ev-footer">
+        <button type="button" class="btn-text danger" id="ev-delete-btn" hidden>Delete</button>
+        <div class="ev-footer-right">
+          <button type="button" class="btn-text" id="ev-cancel-btn">Cancel</button>
+          <button type="submit" class="btn-solid ev-save-btn">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<template id="tpl-day-event">
+  <button type="button" class="day-event">
+    <span class="day-event-time"></span>
+    <span class="day-event-main">
+      <span class="day-event-title"></span>
+      <span class="day-event-loc"></span>
+    </span>
+    <span class="day-event-repeat" title="Repeats">⟳</span>
   </button>
 </template>
 
@@ -185,16 +247,19 @@
           <div class="habit-edit-freq-row">
             <select class="habit-edit-freq-type freq-select">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly">X times a week</option>
+              <option value="days">Specific days</option>
             </select>
             <div class="freq-count-wrap habit-edit-freq-count-wrap">
-              <input type="number" class="habit-edit-freq-count" min="1" max="6">
+              <input type="number" class="habit-edit-freq-count" min="1" max="7">
               <span class="freq-suffix">× / week</span>
             </div>
           </div>
+          <div class="freq-days-wrap habit-edit-freq-days-wrap"></div>
         </div>
         <span class="habit-stat"></span>
         <span class="habit-substat"></span>
+        <span class="habit-not-scheduled">Not scheduled today</span>
       </div>
       <div class="habit-card-actions">
         <div class="habit-actions-view">
@@ -218,11 +283,21 @@
       <span class="habit-check-mark"></span>
     </label>
     <div class="assignment-info">
-      <span class="assignment-title"></span>
+      <button type="button" class="assignment-title-btn">
+        <span class="assignment-title"></span>
+      </button>
       <span class="assignment-meta"></span>
+      <div class="assignment-links"></div>
     </div>
     <button class="assign-delete" aria-label="Delete assignment">×</button>
   </div>
+</template>
+
+<template id="tpl-assignment-group">
+  <section class="assignment-group">
+    <h3 class="assignment-group-title"></h3>
+    <div class="assignment-group-list"></div>
+  </section>
 </template>
 
 <script src="app.js"></script>
