@@ -200,6 +200,29 @@
     return hhmmFromMinutes(minutesFromHHMM(hhmm) + delta);
   }
   function round15(mins) { return Math.round(mins / 15) * 15; }
+  function buildTimeOptions(selectEl, selectedValue) {
+    selectEl.innerHTML = '';
+    for (let m = 0; m < 24 * 60; m += 15) {
+      const value = hhmmFromMinutes(m);
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = formatTimeShort(value);
+      selectEl.appendChild(opt);
+    }
+    if (selectedValue) {
+      selectEl.value = selectedValue;
+      if (selectEl.value !== selectedValue) {
+        // selectedValue isn't on the 15-min grid (e.g. a manually-set time) — add it so it isn't silently discarded.
+        const opt = document.createElement('option');
+        opt.value = selectedValue;
+        opt.textContent = formatTimeShort(selectedValue);
+        const options = Array.from(selectEl.options);
+        const insertBefore = options.find(o => o.value > selectedValue);
+        selectEl.insertBefore(opt, insertBefore || null);
+        selectEl.value = selectedValue;
+      }
+    }
+  }
   function humanizeMinutes(mins) {
     if (mins < 60) return `${mins}m`;
     const h = Math.floor(mins / 60), m = mins % 60;
@@ -313,8 +336,24 @@
   let scheduleView = state.scheduleView;
   let editingHabitId = null;
 
+  let toastTimer = null;
+  function showToast(message, isDanger) {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.classList.toggle('danger', !!isDanger);
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
+  }
+
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage full/unavailable */ }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      return true;
+    } catch (e) {
+      showToast("Couldn't save — your device's storage is full. Try removing a large attachment.", true);
+      return false;
+    }
   }
 
   // ---------- habit logs ----------
@@ -364,8 +403,14 @@
       const days = (r.days && r.days.length) ? r.days : [anchor.getDay()];
       return days.includes(d.getDay());
     }
-    if (r.type === 'monthly') return d.getDate() === anchor.getDate();
-    if (r.type === 'yearly') return d.getDate() === anchor.getDate() && d.getMonth() === anchor.getMonth();
+    if (r.type === 'monthly') {
+      const targetDay = Math.min(anchor.getDate(), daysInMonth(d.getFullYear(), d.getMonth()));
+      return d.getDate() === targetDay;
+    }
+    if (r.type === 'yearly') {
+      const targetDay = Math.min(anchor.getDate(), daysInMonth(d.getFullYear(), anchor.getMonth()));
+      return d.getMonth() === anchor.getMonth() && d.getDate() === targetDay;
+    }
     return false;
   }
 
@@ -508,7 +553,7 @@
       const triggerDate = fromDateKey(a.dueDate);
       triggerDate.setDate(triggerDate.getDate() - (a.reminder.daysBefore || 0));
       triggerDate.setHours(9, 0, 0, 0);
-      markFiredAndMaybeNotify(`assign-${a.id}`, triggerDate, a.title, `${a.course} · Due ${formatDueDate(a.dueDate)}`);
+      markFiredAndMaybeNotify(`assign-${a.id}-${a.dueDate}`, triggerDate, a.title, `${a.course} · Due ${formatDueDate(a.dueDate)}`);
     });
   }
   setInterval(checkReminders, 30000);
@@ -644,8 +689,8 @@
     evAllDay.checked = event ? event.allDay : false;
     evTimeRow.hidden = evAllDay.checked;
     evRemindBlock.hidden = evAllDay.checked;
-    evStartInput.value = event ? (event.start || '09:00') : (start || '09:00');
-    evEndInput.value = event ? (event.end || '10:00') : (end || addMinutesToHHMM(start || '09:00', 60));
+    buildTimeOptions(evStartInput, event ? (event.start || '09:00') : (start || '09:00'));
+    buildTimeOptions(evEndInput, event ? (event.end || '10:00') : (end || addMinutesToHHMM(start || '09:00', 60)));
     evLocationInput.value = event ? (event.location || '') : '';
     evDescriptionInput.value = event ? (event.description || '') : '';
 
@@ -1336,7 +1381,18 @@
     }
 
     const viewedWeekday = fromDateKey(selectedDate).getDay();
-    const entries = state.habits.map(habit => ({
+    // Habits not scheduled for this weekday are omitted entirely, except one
+    // currently being edited (so an in-progress edit never vanishes mid-change).
+    const visibleHabits = state.habits.filter(habit => isHabitScheduledOnWeekday(habit, viewedWeekday) || editingHabitId === habit.id);
+    if (visibleHabits.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'Nothing scheduled for this day.';
+      habitsListEl.appendChild(empty);
+      return;
+    }
+
+    const entries = visibleHabits.map(habit => ({
       habit,
       doneToday: isHabitScheduledOnWeekday(habit, viewedWeekday) && isDone(habit.id, selectedDate),
     }));
@@ -1505,8 +1561,7 @@
 
   function openAssignmentLink(a) {
     if (a.attachment && a.attachment.dataUrl) {
-      const w = window.open();
-      if (w) { w.document.write(`<title>${a.title}</title><style>body{margin:0}</style>${a.attachment.type && a.attachment.type.startsWith('image') ? `<img src="${a.attachment.dataUrl}" style="max-width:100%">` : `<embed src="${a.attachment.dataUrl}" width="100%" height="100%">`}`); }
+      window.open(a.attachment.dataUrl, '_blank', 'noopener');
     } else if (a.link) {
       window.open(a.link, '_blank', 'noopener');
     }

@@ -13,6 +13,8 @@
 </head>
 <body>
 
+<div class="toast" id="toast" hidden></div>
+
 <div class="app">
   <header class="app-header">
     <div class="brand">
@@ -200,9 +202,9 @@
       </div>
 
       <div class="ev-field-row" id="ev-time-row">
-        <input type="time" id="ev-start">
+        <select id="ev-start" class="ev-time-select"></select>
         <span class="ev-time-sep">to</span>
-        <input type="time" id="ev-end">
+        <select id="ev-end" class="ev-time-select"></select>
       </div>
 
       <div class="ev-field-block">
