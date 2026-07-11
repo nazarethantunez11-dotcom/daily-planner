@@ -1,11 +1,23 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'planner.v3';
+  const STORAGE_KEY = 'planner.v4';
   const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const HOUR_PX = 48;
   const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+  const COLOR_PALETTE = [
+    { id: 'slate', hex: '#5b6570', label: 'Slate' },
+    { id: 'clay', hex: '#a85c3f', label: 'Clay' },
+    { id: 'amber', hex: '#b8863c', label: 'Amber' },
+    { id: 'olive', hex: '#6d7a42', label: 'Olive' },
+    { id: 'pine', hex: '#3f6b56', label: 'Pine' },
+    { id: 'teal', hex: '#3c7c85', label: 'Teal' },
+    { id: 'indigo', hex: '#4c5c99', label: 'Indigo' },
+    { id: 'plum', hex: '#7a4f82', label: 'Plum' },
+    { id: 'rose', hex: '#a34c6a', label: 'Rose' },
+  ];
 
   const DEFAULT_DAY_BLOCKS = [
     { start: '05:00', end: '05:15', label: 'Wake (early rise buffer)' },
@@ -32,7 +44,7 @@
   function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
 
   function daily(name) { return { id: uid(), name, frequency: { type: 'daily' } }; }
-  function weekly(name, n) { return { id: uid(), name, frequency: { type: 'weekly', timesPerWeek: n } }; }
+  function weekly(name, n) { return { id: uid(), name, frequency: { type: 'weekly', timesPerWeek: n, days: [] } }; }
 
   function buildDefaultHabits() {
     return [
@@ -58,6 +70,45 @@
       daily('Learning a business skill'),
       weekly('Reviewing investments', 1),
     ];
+  }
+
+  // ---------- color helpers ----------
+  function colorHex(id) {
+    const c = COLOR_PALETTE.find(c => c.id === id);
+    return c ? c.hex : null;
+  }
+  function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function rgbToHex(rgb) {
+    return '#' + rgb.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+  }
+  function mixHex(hexA, hexB, amount) {
+    const a = hexToRgb(hexA), b = hexToRgb(hexB);
+    return rgbToHex(a.map((v, i) => v + (b[i] - v) * amount));
+  }
+  function tintHex(hex, amount = 0.85) { return mixHex(hex, '#ffffff', amount); }
+
+  function buildColorSwatches(container, selectedId, onSelect) {
+    container.innerHTML = '';
+    const noneBtn = document.createElement('button');
+    noneBtn.type = 'button';
+    noneBtn.className = 'color-swatch color-swatch-none';
+    noneBtn.title = 'No color';
+    noneBtn.classList.toggle('selected', !selectedId);
+    noneBtn.addEventListener('click', () => onSelect(null));
+    container.appendChild(noneBtn);
+    COLOR_PALETTE.forEach(c => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'color-swatch';
+      btn.style.background = c.hex;
+      btn.title = c.label;
+      btn.classList.toggle('selected', selectedId === c.id);
+      btn.addEventListener('click', () => onSelect(c.id));
+      container.appendChild(btn);
+    });
   }
 
   // ---------- date helpers ----------
@@ -149,6 +200,16 @@
     return hhmmFromMinutes(minutesFromHHMM(hhmm) + delta);
   }
   function round15(mins) { return Math.round(mins / 15) * 15; }
+  function humanizeMinutes(mins) {
+    if (mins < 60) return `${mins}m`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  function relativeTimeLabel(nowMin, startMin, endMin) {
+    if (nowMin < startMin) return `in ${humanizeMinutes(startMin - nowMin)}`;
+    if (nowMin <= endMin) return 'happening now';
+    return 'ended';
+  }
 
   // ---------- storage ----------
   function migrateFromV2(parsedV2) {
@@ -159,16 +220,10 @@
           let end = block.end;
           if (!end || end <= block.start) end = '23:59';
           events.push({
-            id: block.id || uid(),
-            title: block.label || 'Untitled',
-            allDay: false,
-            date: dateKey,
-            start: block.start,
-            end,
-            location: '',
-            description: '',
-            repeat: { type: 'none', days: [], until: null },
-            exceptions: [],
+            id: block.id || uid(), title: block.label || 'Untitled', allDay: false, date: dateKey,
+            start: block.start, end, location: '', description: '', color: null,
+            reminder: { enabled: false, minutesBefore: 10 },
+            repeat: { type: 'none', days: [], until: null }, exceptions: [],
           });
         });
       });
@@ -188,13 +243,12 @@
     if (parsed && Array.isArray(parsed.events)) {
       events = parsed.events;
     } else {
-      // try migrating from the previous (v2) schema stored under a different key
       let legacyRaw = null;
-      try { legacyRaw = localStorage.getItem('planner.v2'); } catch (e) { /* ignore */ }
+      try { legacyRaw = localStorage.getItem('planner.v3') || localStorage.getItem('planner.v2'); } catch (e) { /* ignore */ }
       if (legacyRaw) {
         try {
           const legacy = JSON.parse(legacyRaw);
-          events = migrateFromV2(legacy);
+          events = Array.isArray(legacy.events) ? legacy.events : migrateFromV2(legacy);
           if (!parsed) {
             parsed = { habits: legacy.habits, habitLogs: legacy.habitLogs, assignments: legacy.assignments };
           }
@@ -206,11 +260,11 @@
       events = isFirstRun
         ? DEFAULT_DAY_BLOCKS.map(b => ({
             id: uid(), title: b.label, allDay: false, date: todayKey(), start: b.start, end: b.end,
-            location: '', description: '', repeat: { type: 'none', days: [], until: null }, exceptions: [],
+            location: '', description: '', color: null, reminder: { enabled: false, minutesBefore: 10 },
+            repeat: { type: 'none', days: [], until: null }, exceptions: [],
           }))
         : [];
     }
-    // normalize
     events = events.map(ev => ({
       id: ev.id || uid(),
       title: ev.title || 'Untitled',
@@ -220,6 +274,8 @@
       end: ev.allDay ? null : (ev.end || '10:00'),
       location: ev.location || '',
       description: ev.description || '',
+      color: ev.color || null,
+      reminder: ev.reminder ? { enabled: !!ev.reminder.enabled, minutesBefore: ev.reminder.minutesBefore ?? 10 } : { enabled: false, minutesBefore: 10 },
       repeat: ev.repeat && ev.repeat.type ? { type: ev.repeat.type, days: ev.repeat.days || [], until: ev.repeat.until || null } : { type: 'none', days: [], until: null },
       exceptions: Array.isArray(ev.exceptions) ? ev.exceptions : [],
     }));
@@ -228,12 +284,17 @@
     habits.forEach(h => {
       if (!h.frequency) h.frequency = { type: 'daily' };
       if (h.frequency.type === 'days' && !Array.isArray(h.frequency.days)) h.frequency.days = [new Date().getDay()];
+      if (h.frequency.type === 'weekly' && !Array.isArray(h.frequency.days)) h.frequency.days = [];
+      if (h.time === undefined) h.time = null;
+      if (!h.reminder) h.reminder = { enabled: false };
     });
 
     const assignments = (parsed && Array.isArray(parsed.assignments)) ? parsed.assignments : [];
     assignments.forEach(a => {
       if (a.link === undefined) a.link = '';
       if (a.attachment === undefined) a.attachment = null;
+      if (a.color === undefined) a.color = null;
+      if (!a.reminder) a.reminder = { enabled: false, daysBefore: 0 };
     });
 
     return {
@@ -243,6 +304,7 @@
       assignments,
       scheduleView: (parsed && parsed.scheduleView) ? parsed.scheduleView : 'day',
       assignmentsView: (parsed && parsed.assignmentsView) ? parsed.assignmentsView : 'list',
+      firedReminders: (parsed && parsed.firedReminders) ? parsed.firedReminders : {},
     };
   }
 
@@ -265,31 +327,26 @@
     else delete state.habitLogs[dateKey][habitId];
     save();
   }
+  function habitRestrictedDays(habit) {
+    if (habit.frequency.type === 'days') return habit.frequency.days;
+    if (habit.frequency.type === 'weekly' && habit.frequency.days && habit.frequency.days.length) return habit.frequency.days;
+    return null;
+  }
+  function isHabitScheduledOnWeekday(habit, weekday) {
+    const restricted = habitRestrictedDays(habit);
+    return !restricted || restricted.includes(weekday);
+  }
   function weeklyProgress(habit, dateKey) {
     const start = startOfWeek(dateKey);
-    if (habit.frequency.type === 'days') {
-      const days = habit.frequency.days;
-      let count = 0;
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(start, i);
-        if (days.includes(fromDateKey(d).getDay()) && isDone(habit.id, d)) count++;
-      }
-      return { progress: count, target: days.length };
-    }
+    const restricted = habitRestrictedDays(habit);
     let count = 0;
     for (let i = 0; i < 7; i++) {
-      if (isDone(habit.id, addDays(start, i))) count++;
+      const d = addDays(start, i);
+      if (restricted && !restricted.includes(fromDateKey(d).getDay())) continue;
+      if (isDone(habit.id, d)) count++;
     }
-    return { progress: count, target: habit.frequency.timesPerWeek };
-  }
-  function last90Keys() {
-    const keys = [];
-    let cursor = todayKey();
-    for (let i = 0; i < 90; i++) {
-      keys.push(cursor);
-      cursor = addDays(cursor, -1);
-    }
-    return keys.reverse();
+    const target = habit.frequency.type === 'days' ? habit.frequency.days.length : habit.frequency.timesPerWeek;
+    return { progress: count, target };
   }
 
   // ---------- event occurrence engine ----------
@@ -335,7 +392,8 @@
       ev.exceptions.push(fromDate);
       state.events.push({
         id: uid(), title: ev.title, allDay: ev.allDay, date: toDate, start: newStart, end: newEnd,
-        location: ev.location, description: ev.description,
+        location: ev.location, description: ev.description, color: ev.color,
+        reminder: { ...ev.reminder },
         repeat: { type: 'none', days: [], until: null }, exceptions: [],
       });
     }
@@ -373,11 +431,88 @@
       btn.classList.add('active');
       Object.values(panels).forEach(p => p.classList.remove('active'));
       panels[btn.dataset.tab].classList.add('active');
+      if (btn.dataset.tab !== 'schedule') clearDayTick();
     });
   });
 
   document.getElementById('header-date').textContent =
     new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // ================= NOTIFICATIONS =================
+  const notifToggle = document.getElementById('notif-toggle');
+
+  function updateNotifToggleUI() {
+    if (!('Notification' in window)) { notifToggle.hidden = true; return; }
+    notifToggle.classList.toggle('granted', Notification.permission === 'granted');
+    notifToggle.classList.toggle('denied', Notification.permission === 'denied');
+    notifToggle.title = Notification.permission === 'granted'
+      ? 'Notifications on — reminders fire while this tab is open'
+      : Notification.permission === 'denied'
+        ? 'Notifications blocked — allow them in your browser settings'
+        : 'Enable notifications';
+  }
+  notifToggle.addEventListener('click', () => {
+    if (!('Notification' in window) || Notification.permission === 'denied') return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(updateNotifToggleUI);
+    } else if (Notification.permission === 'granted') {
+      try { new Notification('Notifications are on', { body: 'You\'ll get reminders for anything you\'ve flagged, as long as this tab stays open.' }); } catch (e) { /* ignore */ }
+    }
+  });
+  updateNotifToggleUI();
+
+  function fireNotification(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try { new Notification(title, { body }); } catch (e) { /* ignore */ }
+  }
+
+  function markFiredAndMaybeNotify(key, triggerDate, title, body) {
+    const now = new Date();
+    if (state.firedReminders[key]) return;
+    if (now < triggerDate) return;
+    state.firedReminders[key] = true;
+    if (now - triggerDate <= 10 * 60 * 1000) fireNotification(title, body);
+    save();
+  }
+
+  function checkReminders() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const tKey = todayKey();
+    const tomorrowKey = addDays(tKey, 1);
+
+    state.events.forEach(ev => {
+      if (!ev.reminder || !ev.reminder.enabled || ev.allDay) return;
+      [tKey, tomorrowKey].forEach(occDate => {
+        if (!eventMatchesDate(ev, occDate)) return;
+        const [h, m] = (ev.start || '09:00').split(':').map(Number);
+        const startDate = fromDateKey(occDate);
+        startDate.setHours(h, m, 0, 0);
+        const triggerDate = new Date(startDate.getTime() - (ev.reminder.minutesBefore || 0) * 60000);
+        markFiredAndMaybeNotify(`ev-${ev.id}-${occDate}`, triggerDate, ev.title, `${formatTimeShort(ev.start)}${ev.location ? ' · ' + ev.location : ''}`);
+      });
+    });
+
+    const todayWeekday = fromDateKey(tKey).getDay();
+    state.habits.forEach(h => {
+      if (!h.time || !h.reminder || !h.reminder.enabled) return;
+      if (isDone(h.id, tKey)) return;
+      if (!isHabitScheduledOnWeekday(h, todayWeekday)) return;
+      const [hh, mm] = h.time.split(':').map(Number);
+      const triggerDate = fromDateKey(tKey);
+      triggerDate.setHours(hh, mm, 0, 0);
+      markFiredAndMaybeNotify(`habit-${h.id}-${tKey}`, triggerDate, h.name, 'Time for your habit');
+    });
+
+    state.assignments.forEach(a => {
+      if (!a.reminder || !a.reminder.enabled || a.done) return;
+      const triggerDate = fromDateKey(a.dueDate);
+      triggerDate.setDate(triggerDate.getDate() - (a.reminder.daysBefore || 0));
+      triggerDate.setHours(9, 0, 0, 0);
+      markFiredAndMaybeNotify(`assign-${a.id}`, triggerDate, a.title, `${a.course} · Due ${formatDueDate(a.dueDate)}`);
+    });
+  }
+  setInterval(checkReminders, 30000);
+  checkReminders();
 
   // ================= EVENT MODAL =================
   const evOverlay = document.getElementById('event-modal-overlay');
@@ -390,6 +525,10 @@
   const evEndInput = document.getElementById('ev-end');
   const evRepeatSelect = document.getElementById('ev-repeat');
   const evRepeatChips = document.getElementById('ev-repeat-chips');
+  const evColorRow = document.getElementById('ev-color-row');
+  const evRemindBlock = document.getElementById('ev-remind-block');
+  const evRemindEnabled = document.getElementById('ev-remind-enabled');
+  const evRemindLead = document.getElementById('ev-remind-lead');
   const evLocationInput = document.getElementById('ev-location');
   const evDescriptionInput = document.getElementById('ev-description');
   const evDeleteBtn = document.getElementById('ev-delete-btn');
@@ -398,7 +537,7 @@
   const evCloseBtn = document.getElementById('ev-close-btn');
   const evCancelBtn = document.getElementById('ev-cancel-btn');
 
-  const modalState = { mode: 'create', eventId: null, occurrenceDate: null };
+  const modalState = { mode: 'create', eventId: null, occurrenceDate: null, color: null };
 
   function repeatOptionsFor(dateKey) {
     const d = fromDateKey(dateKey);
@@ -482,7 +621,11 @@
     rebuildRepeatSelect(evDateInput.value);
     updateRepeatChipsVisibility();
   });
-  evAllDay.addEventListener('change', () => { evTimeRow.hidden = evAllDay.checked; });
+  evAllDay.addEventListener('change', () => {
+    evTimeRow.hidden = evAllDay.checked;
+    evRemindBlock.hidden = evAllDay.checked;
+  });
+  evRemindEnabled.addEventListener('change', () => { evRemindLead.hidden = !evRemindEnabled.checked; });
 
   function resetDeleteConfirmState() {
     evDeleteConfirm.hidden = true;
@@ -493,16 +636,25 @@
     modalState.mode = mode;
     modalState.eventId = event ? event.id : null;
     modalState.occurrenceDate = occurrenceDate || (event ? event.date : date);
+    modalState.color = event ? event.color : null;
 
     evTitleInput.value = event ? event.title : '';
     const dKey = event ? (occurrenceDate || event.date) : date;
     evDateInput.value = dKey;
     evAllDay.checked = event ? event.allDay : false;
     evTimeRow.hidden = evAllDay.checked;
+    evRemindBlock.hidden = evAllDay.checked;
     evStartInput.value = event ? (event.start || '09:00') : (start || '09:00');
     evEndInput.value = event ? (event.end || '10:00') : (end || addMinutesToHHMM(start || '09:00', 60));
     evLocationInput.value = event ? (event.location || '') : '';
     evDescriptionInput.value = event ? (event.description || '') : '';
+
+    buildColorSwatches(evColorRow, modalState.color, onEvColorSelect);
+
+    const rem = event ? event.reminder : { enabled: false, minutesBefore: 10 };
+    evRemindEnabled.checked = !!(rem && rem.enabled);
+    evRemindLead.hidden = !evRemindEnabled.checked;
+    evRemindLead.value = String((rem && rem.minutesBefore) ?? 10);
 
     rebuildRepeatSelect(dKey, event ? repeatSelectValueFor(event.repeat, dKey) : 'none');
     evRepeatChips.innerHTML = '';
@@ -517,6 +669,11 @@
     evOverlay.hidden = false;
     document.body.style.overflow = 'hidden';
     setTimeout(() => evTitleInput.focus(), 30);
+  }
+
+  function onEvColorSelect(id) {
+    modalState.color = id;
+    buildColorSwatches(evColorRow, modalState.color, onEvColorSelect);
   }
 
   function closeEventModal() {
@@ -563,12 +720,14 @@
     const location = evLocationInput.value.trim();
     const description = evDescriptionInput.value.trim();
     const repeat = buildRepeatFromForm(date);
+    const color = modalState.color;
+    const reminder = allDay ? { enabled: false, minutesBefore: 10 } : { enabled: evRemindEnabled.checked, minutesBefore: Number(evRemindLead.value) || 0 };
 
     if (modalState.mode === 'create') {
-      state.events.push({ id: uid(), title, allDay, date, start, end, location, description, repeat, exceptions: [] });
+      state.events.push({ id: uid(), title, allDay, date, start, end, location, description, color, reminder, repeat, exceptions: [] });
     } else {
       const ev = findEvent(modalState.eventId);
-      if (ev) Object.assign(ev, { title, allDay, date, start, end, location, description, repeat });
+      if (ev) Object.assign(ev, { title, allDay, date, start, end, location, description, color, reminder, repeat });
     }
     save();
     closeEventModal();
@@ -641,6 +800,7 @@
   schedTodayBtn.addEventListener('click', () => setSelectedDate(todayKey()));
 
   function renderSchedule() {
+    clearDayTick();
     if (scheduleView === 'day') schedDateLabel.textContent = formatDayLabel(selectedDate);
     else if (scheduleView === 'week') schedDateLabel.textContent = formatWeekLabel(selectedDate);
     else if (scheduleView === 'month') schedDateLabel.textContent = formatMonthLabel(selectedDate);
@@ -658,26 +818,67 @@
 
   // ---- Day view ----
   const dayEventsListEl = document.getElementById('day-events-list');
+  let dayTickInterval = null;
+  function clearDayTick() { if (dayTickInterval) { clearInterval(dayTickInterval); dayTickInterval = null; } }
+
+  function buildNowMarker(nowMin) {
+    const el = document.createElement('div');
+    el.className = 'day-now-marker';
+    el.innerHTML = `<span class="day-now-dot"></span><span>Now — ${formatTimeShort(hhmmFromMinutes(nowMin))}</span>`;
+    return el;
+  }
 
   function renderDayView() {
     dayEventsListEl.innerHTML = '';
     const events = getEventsForDate(selectedDate);
+    const isToday = selectedDate === todayKey();
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+
     if (events.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
       empty.textContent = 'Nothing scheduled — add an event below.';
       dayEventsListEl.appendChild(empty);
-      return;
+      if (isToday) dayEventsListEl.appendChild(buildNowMarker(nowMin));
+    } else {
+      let markerPlaced = false;
+      events.forEach(ev => {
+        if (isToday && !ev.allDay && !markerPlaced) {
+          const startMin = minutesFromHHMM(ev.start);
+          if (nowMin < startMin) {
+            dayEventsListEl.appendChild(buildNowMarker(nowMin));
+            markerPlaced = true;
+          }
+        }
+        const node = dayEventTpl.content.firstElementChild.cloneNode(true);
+        node.querySelector('.day-event-time').textContent = ev.allDay ? 'All day' : `${formatTimeShort(ev.start)}\n${formatTimeShort(ev.end)}`;
+        node.querySelector('.day-event-title').textContent = ev.title;
+        node.querySelector('.day-event-loc').textContent = ev.location || '';
+        node.querySelector('.day-event-repeat').hidden = ev.repeat.type === 'none';
+        const hex = colorHex(ev.color);
+        if (hex) {
+          node.style.borderLeftWidth = '4px';
+          node.style.borderLeftColor = hex;
+          node.querySelector('.day-event-time').style.color = hex;
+        }
+        if (isToday && !ev.allDay) {
+          const startMin = minutesFromHHMM(ev.start), endMin = minutesFromHHMM(ev.end);
+          const rel = document.createElement('span');
+          rel.className = 'day-event-relative';
+          rel.textContent = relativeTimeLabel(nowMin, startMin, endMin);
+          node.querySelector('.day-event-main').appendChild(rel);
+        }
+        node.addEventListener('click', () => openEditModal(ev.id, ev.occurrenceDate));
+        dayEventsListEl.appendChild(node);
+      });
+      if (isToday && !markerPlaced) dayEventsListEl.appendChild(buildNowMarker(nowMin));
     }
-    events.forEach(ev => {
-      const node = dayEventTpl.content.firstElementChild.cloneNode(true);
-      node.querySelector('.day-event-time').textContent = ev.allDay ? 'All day' : `${formatTimeShort(ev.start)}\n${formatTimeShort(ev.end)}`;
-      node.querySelector('.day-event-title').textContent = ev.title;
-      node.querySelector('.day-event-loc').textContent = ev.location || '';
-      node.querySelector('.day-event-repeat').hidden = ev.repeat.type === 'none';
-      node.addEventListener('click', () => openEditModal(ev.id, ev.occurrenceDate));
-      dayEventsListEl.appendChild(node);
-    });
+
+    if (isToday) {
+      clearDayTick();
+      dayTickInterval = setInterval(renderDayView, 30000);
+    }
   }
 
   document.getElementById('add-event-btn').addEventListener('click', () => {
@@ -753,6 +954,8 @@
         pill.type = 'button';
         pill.className = 'whg-allday-pill';
         pill.textContent = ev.title;
+        const hex = colorHex(ev.color);
+        if (hex) { pill.style.background = tintHex(hex); pill.style.color = hex; }
         pill.addEventListener('click', ev2 => { ev2.stopPropagation(); openEditModal(ev.id, ev.occurrenceDate); });
         allDayCell.appendChild(pill);
       });
@@ -781,6 +984,8 @@
         block.style.height = `${height}px`;
         block.style.left = `${item.colIndex * widthPct}%`;
         block.style.width = `calc(${widthPct}% - 2px)`;
+        const hex = colorHex(item.ev.color);
+        if (hex) block.style.background = hex;
         block.innerHTML = `<span class="we-title">${escapeHtml(item.ev.title)}</span><span class="we-time">${formatTimeShort(item.ev.start)} – ${formatTimeShort(item.ev.end)}</span>`;
         col.appendChild(block);
       });
@@ -944,6 +1149,8 @@
         pill.type = 'button';
         pill.className = 'month-pill';
         pill.innerHTML = ev.allDay ? escapeHtml(ev.title) : `<span class="mp-time">${formatTimeShort(ev.start)}</span>${escapeHtml(ev.title)}`;
+        const hex = colorHex(ev.color);
+        if (hex) { pill.style.background = tintHex(hex); pill.style.borderLeft = `3px solid ${hex}`; }
         pill.addEventListener('click', e => { e.stopPropagation(); openEditModal(ev.id, ev.occurrenceDate); });
         eventsWrap.appendChild(pill);
       });
@@ -1035,19 +1242,32 @@
   const habitFreqCountWrap = document.getElementById('habit-freq-count-wrap');
   const habitFreqCount = document.getElementById('habit-freq-count');
   const habitFreqDaysWrap = document.getElementById('habit-freq-days-wrap');
+  const habitFreqWeeklyDaysWrap = document.getElementById('habit-freq-weekly-days-wrap');
+  const habitFreqWeeklyDaysChips = document.getElementById('habit-freq-weekly-days-chips');
+  const habitTimeInput = document.getElementById('habit-time-input');
+  const habitRemindWrap = document.getElementById('habit-remind-wrap');
+  const habitRemindEnabled = document.getElementById('habit-remind-enabled');
 
   function updateHabitFormFreqUI() {
     const type = habitFreqType.value;
     habitFreqCountWrap.hidden = type !== 'weekly';
     habitFreqDaysWrap.hidden = type !== 'days';
+    habitFreqWeeklyDaysWrap.hidden = type !== 'weekly';
     if (type === 'days' && !habitFreqDaysWrap.children.length) {
       buildWeekdayChips(habitFreqDaysWrap, [new Date().getDay()], 1);
     }
+    if (type === 'weekly' && !habitFreqWeeklyDaysChips.children.length) {
+      buildWeekdayChips(habitFreqWeeklyDaysChips, [], 0);
+    }
   }
   habitFreqType.addEventListener('change', updateHabitFormFreqUI);
+  habitTimeInput.addEventListener('input', () => {
+    habitRemindWrap.hidden = !habitTimeInput.value;
+    if (!habitTimeInput.value) habitRemindEnabled.checked = false;
+  });
 
-  function frequencyFromSelectAndInputs(typeVal, countInput, daysWrap) {
-    if (typeVal === 'weekly') return { type: 'weekly', timesPerWeek: clamp(parseInt(countInput.value, 10) || 1, 1, 7) };
+  function frequencyFromSelectAndInputs(typeVal, countInput, daysWrap, weeklyDaysChips) {
+    if (typeVal === 'weekly') return { type: 'weekly', timesPerWeek: clamp(parseInt(countInput.value, 10) || 1, 1, 7), days: getSelectedChipDays(weeklyDaysChips) };
     if (typeVal === 'days') return { type: 'days', days: getSelectedChipDays(daysWrap) };
     return { type: 'daily' };
   }
@@ -1056,13 +1276,18 @@
     e.preventDefault();
     const name = habitNameInput.value.trim();
     if (!name) return;
-    const frequency = frequencyFromSelectAndInputs(habitFreqType.value, habitFreqCount, habitFreqDaysWrap);
-    state.habits.push({ id: uid(), name, frequency });
+    const frequency = frequencyFromSelectAndInputs(habitFreqType.value, habitFreqCount, habitFreqDaysWrap, habitFreqWeeklyDaysChips);
+    const time = habitTimeInput.value || null;
+    const reminder = { enabled: !!time && habitRemindEnabled.checked };
+    state.habits.push({ id: uid(), name, frequency, time, reminder });
     save();
     habitForm.reset();
     habitFreqCountWrap.hidden = true;
     habitFreqDaysWrap.hidden = true;
     habitFreqDaysWrap.innerHTML = '';
+    habitFreqWeeklyDaysWrap.hidden = true;
+    habitFreqWeeklyDaysChips.innerHTML = '';
+    habitRemindWrap.hidden = true;
     renderHabits();
     habitNameInput.focus();
   });
@@ -1073,7 +1298,11 @@
 
   function freqBadgeText(freq) {
     if (freq.type === 'daily') return 'Daily';
-    if (freq.type === 'weekly') return `${freq.timesPerWeek}× / week`;
+    if (freq.type === 'weekly') {
+      const base = `${freq.timesPerWeek}× / week`;
+      if (freq.days && freq.days.length) return `${base} · ${freq.days.slice().sort().map(d => WEEKDAY_SHORT[d]).join(', ')}`;
+      return base;
+    }
     if (freq.type === 'days') return freq.days.slice().sort().map(d => WEEKDAY_SHORT[d]).join(', ');
     return '';
   }
@@ -1093,21 +1322,6 @@
     }
   }
 
-  function renderHabitDotGrid(habitId, node, days) {
-    const gridEl = node.querySelector('.habit-grid');
-    gridEl.innerHTML = '';
-    const tKey = todayKey();
-    days.forEach((dayKey, i) => {
-      const dot = document.createElement('span');
-      dot.className = 'hg-dot';
-      if (isDone(habitId, dayKey)) dot.classList.add('filled');
-      if (dayKey === tKey) dot.classList.add('today-marker');
-      if (i === days.length - 21) dot.classList.add('milestone-21');
-      dot.title = dayKey;
-      gridEl.appendChild(dot);
-    });
-  }
-
   function renderHabits() {
     viewedDateLabel.textContent = formatDayLabel(selectedDate);
     habitsTodayBtn.hidden = selectedDate === todayKey();
@@ -1121,32 +1335,36 @@
       return;
     }
 
-    const days = last90Keys();
     const viewedWeekday = fromDateKey(selectedDate).getDay();
+    const entries = state.habits.map(habit => ({
+      habit,
+      doneToday: isHabitScheduledOnWeekday(habit, viewedWeekday) && isDone(habit.id, selectedDate),
+    }));
+    entries.sort((a, b) => (a.doneToday === b.doneToday) ? 0 : (a.doneToday ? 1 : -1));
 
-    state.habits.forEach(habit => {
+    entries.forEach(({ habit, doneToday }) => {
       const node = habitCardTpl.content.firstElementChild.cloneNode(true);
       node.dataset.id = habit.id;
       const editing = editingHabitId === habit.id;
       node.classList.toggle('editing', editing);
+      node.classList.toggle('completed', doneToday);
 
-      const isScheduledToday = habit.frequency.type !== 'days' || habit.frequency.days.includes(viewedWeekday);
+      const isScheduledToday = isHabitScheduledOnWeekday(habit, viewedWeekday);
       node.classList.toggle('not-scheduled', !isScheduledToday);
 
       node.querySelector('.habit-name').textContent = habit.name;
       node.querySelector('.habit-freq-badge').textContent = freqBadgeText(habit.frequency);
+      node.querySelector('.habit-time-badge').textContent = habit.time ? formatTimeShort(habit.time) : '';
 
       const checkbox = node.querySelector('.habit-checkbox');
-      checkbox.checked = isScheduledToday && isDone(habit.id, selectedDate);
+      checkbox.checked = doneToday;
       checkbox.disabled = !isScheduledToday;
       checkbox.addEventListener('change', e => {
         setDone(habit.id, selectedDate, e.target.checked);
-        updateHabitStat(habit, node);
-        renderHabitDotGrid(habit.id, node, days);
+        renderHabits();
       });
 
       updateHabitStat(habit, node);
-      renderHabitDotGrid(habit.id, node, days);
 
       node.querySelector('.habit-display').hidden = editing;
       node.querySelector('.habit-edit-fields').hidden = !editing;
@@ -1161,22 +1379,42 @@
         const countWrap = node.querySelector('.habit-edit-freq-count-wrap');
         const countInput = node.querySelector('.habit-edit-freq-count');
         const daysWrap = node.querySelector('.habit-edit-freq-days-wrap');
+        const weeklyDaysWrap = node.querySelector('.habit-edit-freq-weekly-days-wrap');
+        const weeklyDaysChips = node.querySelector('.habit-edit-freq-weekly-days-chips');
+        const timeInput = node.querySelector('.habit-edit-time');
+        const remindWrap = node.querySelector('.habit-edit-remind-wrap');
+        const remindEnabled = node.querySelector('.habit-edit-remind-enabled');
+
         countInput.value = habit.frequency.type === 'weekly' ? habit.frequency.timesPerWeek : 1;
         countWrap.hidden = habit.frequency.type !== 'weekly';
         daysWrap.hidden = habit.frequency.type !== 'days';
+        weeklyDaysWrap.hidden = habit.frequency.type !== 'weekly';
         buildWeekdayChips(daysWrap, habit.frequency.type === 'days' ? habit.frequency.days : [viewedWeekday], 1);
+        buildWeekdayChips(weeklyDaysChips, habit.frequency.type === 'weekly' ? (habit.frequency.days || []) : [], 0);
+
+        timeInput.value = habit.time || '';
+        remindWrap.hidden = !habit.time;
+        remindEnabled.checked = !!(habit.reminder && habit.reminder.enabled);
+        timeInput.addEventListener('input', () => {
+          remindWrap.hidden = !timeInput.value;
+          if (!timeInput.value) remindEnabled.checked = false;
+        });
 
         freqTypeSel.addEventListener('change', () => {
           countWrap.hidden = freqTypeSel.value !== 'weekly';
           daysWrap.hidden = freqTypeSel.value !== 'days';
+          weeklyDaysWrap.hidden = freqTypeSel.value !== 'weekly';
           if (freqTypeSel.value === 'days' && !daysWrap.children.length) buildWeekdayChips(daysWrap, [viewedWeekday], 1);
+          if (freqTypeSel.value === 'weekly' && !weeklyDaysChips.children.length) buildWeekdayChips(weeklyDaysChips, [], 0);
         });
 
         node.querySelector('.habit-save-btn').addEventListener('click', () => {
           const newName = nameInput.value.trim();
           if (!newName) return;
           habit.name = newName;
-          habit.frequency = frequencyFromSelectAndInputs(freqTypeSel.value, countInput, daysWrap);
+          habit.frequency = frequencyFromSelectAndInputs(freqTypeSel.value, countInput, daysWrap, weeklyDaysChips);
+          habit.time = timeInput.value || null;
+          habit.reminder = { enabled: !!habit.time && remindEnabled.checked };
           save();
           editingHabitId = null;
           renderHabits();
@@ -1212,12 +1450,23 @@
   const assignFileInput = document.getElementById('assign-file-input');
   const assignFileName = document.getElementById('assign-file-name');
   const assignFileClear = document.getElementById('assign-file-clear');
+  const assignColorRow = document.getElementById('assign-color-row');
+  const assignRemindEnabled = document.getElementById('assign-remind-enabled');
+  const assignRemindLead = document.getElementById('assign-remind-lead');
   const assignmentsListEl = document.getElementById('assignments-list');
   const assignmentsGroupedEl = document.getElementById('assignments-grouped');
   const assignRowTpl = document.getElementById('tpl-assignment-row');
   const assignGroupTpl = document.getElementById('tpl-assignment-group');
 
   let pendingAttachment = null;
+  let pendingAssignColor = null;
+
+  function refreshAssignColorRow() {
+    buildColorSwatches(assignColorRow, pendingAssignColor, id => { pendingAssignColor = id; refreshAssignColorRow(); });
+  }
+  refreshAssignColorRow();
+
+  assignRemindEnabled.addEventListener('change', () => { assignRemindLead.hidden = !assignRemindEnabled.checked; });
 
   assignFileBtn.addEventListener('click', () => assignFileInput.click());
   assignFileInput.addEventListener('change', () => {
@@ -1263,12 +1512,28 @@
     }
   }
 
+  let openColorPopoverId = null;
+
+  function closeColorPopovers() {
+    document.querySelectorAll('.assignment-color-popover').forEach(p => { p.hidden = true; p.innerHTML = ''; });
+    openColorPopoverId = null;
+  }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.assignment-color-dot') && !e.target.closest('.assignment-color-popover')) closeColorPopovers();
+  });
+
   function buildAssignmentRow(a, tKey) {
     const node = assignRowTpl.content.firstElementChild.cloneNode(true);
     node.dataset.id = a.id;
     if (a.done) node.classList.add('done');
     if (!a.done && a.dueDate < tKey) node.classList.add('overdue');
     if (!a.done && a.dueDate === tKey) node.classList.add('due-today');
+
+    const hex = colorHex(a.color);
+    const colorBar = node.querySelector('.assignment-color-bar');
+    if (hex) colorBar.style.background = hex;
+    const colorDot = node.querySelector('.assignment-color-dot');
+    if (hex) { colorDot.style.background = hex; colorDot.classList.add('has-color'); }
 
     node.querySelector('.assignment-title').textContent = a.title;
     node.querySelector('.assignment-meta').textContent = `${a.course} · Due ${formatDueDate(a.dueDate)}`;
@@ -1307,6 +1572,22 @@
       renderAssignments();
     });
 
+    const popover = node.querySelector('.assignment-color-popover');
+    colorDot.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = openColorPopoverId === a.id;
+      closeColorPopovers();
+      if (isOpen) return;
+      buildColorSwatches(popover, a.color, id => {
+        a.color = id;
+        save();
+        closeColorPopovers();
+        renderAssignments();
+      });
+      popover.hidden = false;
+      openColorPopoverId = a.id;
+    });
+
     node.querySelector('.assign-delete').addEventListener('click', () => {
       state.assignments = state.assignments.filter(x => x.id !== a.id);
       save();
@@ -1333,14 +1614,18 @@
     }
 
     const tKey = todayKey();
-    const sorted = [...state.assignments].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
     if (!isStatusView) {
+      const listSorted = [...state.assignments].sort((a, b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
       assignmentsListEl.innerHTML = '';
-      sorted.forEach(a => assignmentsListEl.appendChild(buildAssignmentRow(a, tKey)));
+      listSorted.forEach(a => assignmentsListEl.appendChild(buildAssignmentRow(a, tKey)));
       return;
     }
 
+    const sorted = [...state.assignments].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     assignmentsGroupedEl.innerHTML = '';
     const groups = [
       { key: 'overdue', title: 'Overdue', items: sorted.filter(a => !a.done && a.dueDate < tKey), cls: 'is-overdue' },
@@ -1365,12 +1650,16 @@
     const dueDate = assignDueInput.value;
     if (!title || !course || !dueDate) return;
     const link = assignLinkInput.value.trim();
-    state.assignments.push({ id: uid(), title, course, dueDate, done: false, link, attachment: pendingAttachment });
+    const reminder = { enabled: assignRemindEnabled.checked, daysBefore: Number(assignRemindLead.value) || 0 };
+    state.assignments.push({ id: uid(), title, course, dueDate, done: false, link, attachment: pendingAttachment, color: pendingAssignColor, reminder });
     save();
     assignForm.reset();
     pendingAttachment = null;
+    pendingAssignColor = null;
+    refreshAssignColorRow();
     assignFileName.textContent = '';
     assignFileClear.hidden = true;
+    assignRemindLead.hidden = true;
     renderAssignments();
     assignTitleInput.focus();
   });

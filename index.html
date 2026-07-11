@@ -19,7 +19,10 @@
       <span class="brand-mark">✦</span>
       <h1>The Day</h1>
     </div>
-    <div class="header-date" id="header-date"></div>
+    <div class="header-right">
+      <button type="button" class="notif-toggle" id="notif-toggle" title="Enable notifications" aria-label="Toggle notifications">🔔</button>
+      <div class="header-date" id="header-date"></div>
+    </div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -104,6 +107,17 @@
           </div>
         </div>
         <div class="freq-days-wrap" id="habit-freq-days-wrap" hidden></div>
+        <div class="freq-days-optional-wrap" id="habit-freq-weekly-days-wrap" hidden>
+          <span class="freq-days-optional-label">Only on:</span>
+          <div class="freq-days-optional-chips" id="habit-freq-weekly-days-chips"></div>
+        </div>
+        <div class="habit-form-time">
+          <input type="time" id="habit-time-input" placeholder="Time (optional)">
+          <label class="remind-toggle" id="habit-remind-wrap" hidden>
+            <input type="checkbox" id="habit-remind-enabled">
+            <span>Remind me</span>
+          </label>
+        </div>
         <button type="submit" class="btn-solid">Add Habit</button>
       </form>
 
@@ -144,6 +158,22 @@
           <span class="assign-file-name" id="assign-file-name"></span>
           <button type="button" class="assign-file-clear" id="assign-file-clear" hidden aria-label="Remove attachment">×</button>
         </div>
+        <div class="assignment-form-color">
+          <span class="ev-label">Color</span>
+          <div class="color-swatch-row" id="assign-color-row"></div>
+        </div>
+        <div class="assignment-form-row assignment-form-remind">
+          <label class="remind-toggle">
+            <input type="checkbox" id="assign-remind-enabled">
+            <span>Remind me</span>
+          </label>
+          <select id="assign-remind-lead" hidden>
+            <option value="0">On due date</option>
+            <option value="1">1 day before</option>
+            <option value="3">3 days before</option>
+            <option value="7">1 week before</option>
+          </select>
+        </div>
         <button type="submit" class="btn-solid">Add Assignment</button>
       </form>
 
@@ -179,6 +209,25 @@
         <label class="ev-label" for="ev-repeat">Repeat</label>
         <select id="ev-repeat"></select>
         <div class="ev-repeat-chips" id="ev-repeat-chips" hidden></div>
+      </div>
+
+      <div class="ev-field-block">
+        <span class="ev-label">Color</span>
+        <div class="color-swatch-row" id="ev-color-row"></div>
+      </div>
+
+      <div class="ev-field-block" id="ev-remind-block">
+        <label class="remind-toggle">
+          <input type="checkbox" id="ev-remind-enabled">
+          <span>Remind me</span>
+        </label>
+        <select id="ev-remind-lead" hidden>
+          <option value="0">At start time</option>
+          <option value="10">10 minutes before</option>
+          <option value="30">30 minutes before</option>
+          <option value="60">1 hour before</option>
+          <option value="1440">1 day before</option>
+        </select>
       </div>
 
       <div class="ev-field-block">
@@ -240,6 +289,7 @@
       <div class="habit-card-info">
         <div class="habit-display">
           <span class="habit-name"></span>
+          <span class="habit-time-badge"></span>
           <span class="habit-freq-badge"></span>
         </div>
         <div class="habit-edit-fields" hidden>
@@ -256,6 +306,17 @@
             </div>
           </div>
           <div class="freq-days-wrap habit-edit-freq-days-wrap"></div>
+          <div class="freq-days-optional-wrap habit-edit-freq-weekly-days-wrap">
+            <span class="freq-days-optional-label">Only on:</span>
+            <div class="freq-days-optional-chips habit-edit-freq-weekly-days-chips"></div>
+          </div>
+          <div class="habit-edit-time-row">
+            <input type="time" class="habit-edit-time">
+            <label class="remind-toggle habit-edit-remind-wrap">
+              <input type="checkbox" class="habit-edit-remind-enabled">
+              <span>Remind me</span>
+            </label>
+          </div>
         </div>
         <span class="habit-stat"></span>
         <span class="habit-substat"></span>
@@ -272,12 +333,12 @@
         </div>
       </div>
     </div>
-    <div class="habit-grid"></div>
   </div>
 </template>
 
 <template id="tpl-assignment-row">
   <div class="assignment-row" data-id="">
+    <div class="assignment-color-bar"></div>
     <label class="habit-check assignment-check">
       <input type="checkbox" class="assign-checkbox">
       <span class="habit-check-mark"></span>
@@ -289,7 +350,11 @@
       <span class="assignment-meta"></span>
       <div class="assignment-links"></div>
     </div>
-    <button class="assign-delete" aria-label="Delete assignment">×</button>
+    <div class="assignment-row-actions">
+      <button type="button" class="assignment-color-dot" aria-label="Set color"></button>
+      <button class="assign-delete" aria-label="Delete assignment">×</button>
+    </div>
+    <div class="assignment-color-popover" hidden></div>
   </div>
 </template>
 
