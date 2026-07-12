@@ -137,7 +137,7 @@ html, body {
 /* Panels */
 .tab-panels { flex: 1; padding: 20px 20px 60px; width: 100%; }
 
-#panel-habits, #panel-assignments { max-width: 680px; margin: 0 auto; width: 100%; }
+#panel-habits, #panel-assignments, #panel-todos { max-width: 680px; margin: 0 auto; width: 100%; }
 
 .schedule-controls, .schedule-view-narrow { max-width: 640px; margin: 0 auto; width: 100%; }
 #view-week, #view-month { max-width: 1040px; margin: 0 auto; width: 100%; }
@@ -1181,6 +1181,30 @@ html, body {
 .assignment-form-remind { align-items: center; }
 
 .assignments-list, .assignments-grouped { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- To-Do ---------- */
+.todo-form-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.todo-date-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.todo-chip {
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.todo-chip:hover { border-color: var(--ink-faint); }
+.todo-chip.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+.todo-date-input { flex: 1 1 140px; min-width: 0; width: auto; }
+
+.todo-groups { display: flex; flex-direction: column; }
 
 .assignment-group { margin-bottom: 18px; }
 .assignment-group-title {

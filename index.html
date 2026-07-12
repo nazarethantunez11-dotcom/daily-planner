@@ -42,6 +42,7 @@
     <button class="tab-btn active" data-tab="schedule">Schedule</button>
     <button class="tab-btn" data-tab="habits">Habits</button>
     <button class="tab-btn" data-tab="assignments">Assignments</button>
+    <button class="tab-btn" data-tab="todos">To-Do</button>
   </nav>
 
   <main class="tab-panels">
@@ -195,6 +196,32 @@
 
       <div class="assignments-list" id="assignments-list"></div>
       <div class="assignments-grouped" id="assignments-grouped" hidden></div>
+    </section>
+
+    <!-- TO-DO -->
+    <section class="panel" id="panel-todos">
+      <div class="panel-head">
+        <h2>To-Do</h2>
+      </div>
+
+      <form class="assignment-form todo-form" id="todo-form">
+        <input type="text" id="todo-text" placeholder="Add a task…" required>
+        <div class="todo-form-row">
+          <div class="todo-date-chips" id="todo-date-chips">
+            <button type="button" class="todo-chip" data-quick="today">Today</button>
+            <button type="button" class="todo-chip" data-quick="tomorrow">Tomorrow</button>
+            <button type="button" class="todo-chip" data-quick="someday">Someday</button>
+          </div>
+          <input type="date" id="todo-date" class="todo-date-input">
+        </div>
+        <div class="assignment-form-color">
+          <span class="ev-label">Color</span>
+          <div class="color-swatch-row" id="todo-color-row"></div>
+        </div>
+        <button type="submit" class="btn-solid">Add Task</button>
+      </form>
+
+      <div class="todo-groups" id="todo-groups"></div>
     </section>
 
   </main>
@@ -422,6 +449,32 @@
 </template>
 
 <template id="tpl-assignment-group">
+  <section class="assignment-group">
+    <h3 class="assignment-group-title"></h3>
+    <div class="assignment-group-list"></div>
+  </section>
+</template>
+
+<template id="tpl-todo-row">
+  <div class="assignment-row todo-row" data-id="">
+    <div class="assignment-color-bar"></div>
+    <label class="habit-check assignment-check">
+      <input type="checkbox" class="todo-checkbox">
+      <span class="habit-check-mark"></span>
+    </label>
+    <div class="assignment-info">
+      <span class="assignment-title"></span>
+      <span class="assignment-meta" hidden></span>
+    </div>
+    <div class="assignment-row-actions">
+      <button type="button" class="assignment-color-dot" aria-label="Set color"></button>
+      <button class="assign-delete todo-delete" aria-label="Delete task">×</button>
+    </div>
+    <div class="assignment-color-popover" hidden></div>
+  </div>
+</template>
+
+<template id="tpl-todo-group">
   <section class="assignment-group">
     <h3 class="assignment-group-title"></h3>
     <div class="assignment-group-list"></div>

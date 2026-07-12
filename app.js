@@ -426,11 +426,19 @@
       if (!a.reminder) a.reminder = { enabled: false, daysBefore: 0 };
     });
 
+    const todos = (parsed && Array.isArray(parsed.todos)) ? parsed.todos : [];
+    todos.forEach(t => {
+      if (t.date === undefined) t.date = null;
+      if (t.color === undefined) t.color = null;
+      if (t.done === undefined) t.done = false;
+    });
+
     return {
       events,
       habits,
       habitLogs: (parsed && parsed.habitLogs) ? parsed.habitLogs : {},
       assignments,
+      todos,
       scheduleView: (parsed && parsed.scheduleView) ? parsed.scheduleView : 'day',
       assignmentsView: (parsed && parsed.assignmentsView) ? parsed.assignmentsView : 'list',
       firedReminders: (parsed && parsed.firedReminders) ? parsed.firedReminders : {},
@@ -575,6 +583,7 @@
     schedule: document.getElementById('panel-schedule'),
     habits: document.getElementById('panel-habits'),
     assignments: document.getElementById('panel-assignments'),
+    todos: document.getElementById('panel-todos'),
   };
   tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1902,10 +1911,158 @@
     showToast(count > 0 ? `Imported ${count} assignment${count === 1 ? '' : 's'}.` : 'Nothing imported — check the boxes for rows to include.');
   });
 
+  // ================= TO-DO =================
+  const todoForm = document.getElementById('todo-form');
+  const todoTextInput = document.getElementById('todo-text');
+  const todoDateInput = document.getElementById('todo-date');
+  const todoChips = document.querySelectorAll('#todo-date-chips .todo-chip');
+  const todoColorRow = document.getElementById('todo-color-row');
+  const todoGroupsEl = document.getElementById('todo-groups');
+  const todoRowTpl = document.getElementById('tpl-todo-row');
+  const todoGroupTpl = document.getElementById('tpl-todo-group');
+
+  let pendingTodoColor = null;
+
+  function refreshTodoColorRow() {
+    buildColorSwatches(todoColorRow, pendingTodoColor, id => { pendingTodoColor = id; refreshTodoColorRow(); });
+  }
+  refreshTodoColorRow();
+
+  function syncTodoChipsToDate() {
+    const val = todoDateInput.value;
+    const tKey = todayKey();
+    const tomorrowKey = addDays(tKey, 1);
+    todoChips.forEach(chip => {
+      const q = chip.dataset.quick;
+      const match = (q === 'today' && val === tKey) || (q === 'tomorrow' && val === tomorrowKey) || (q === 'someday' && val === '');
+      chip.classList.toggle('active', match);
+    });
+  }
+  todoChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const q = chip.dataset.quick;
+      if (q === 'today') todoDateInput.value = todayKey();
+      else if (q === 'tomorrow') todoDateInput.value = addDays(todayKey(), 1);
+      else todoDateInput.value = '';
+      syncTodoChipsToDate();
+    });
+  });
+  todoDateInput.addEventListener('change', syncTodoChipsToDate);
+  todoDateInput.value = todayKey();
+  syncTodoChipsToDate();
+
+  function buildTodoRow(t, tKey, showDate) {
+    const node = todoRowTpl.content.firstElementChild.cloneNode(true);
+    node.dataset.id = t.id;
+    if (t.done) node.classList.add('done');
+    if (!t.done && t.date && t.date < tKey) node.classList.add('overdue');
+
+    const hex = colorHex(t.color);
+    const colorBar = node.querySelector('.assignment-color-bar');
+    if (hex) colorBar.style.background = hex;
+    const colorDot = node.querySelector('.assignment-color-dot');
+    if (hex) { colorDot.style.background = hex; colorDot.classList.add('has-color'); }
+
+    node.querySelector('.assignment-title').textContent = t.text;
+    const metaEl = node.querySelector('.assignment-meta');
+    if (showDate && t.date) { metaEl.textContent = formatDueDate(t.date); metaEl.hidden = false; } else { metaEl.hidden = true; }
+
+    const checkbox = node.querySelector('.todo-checkbox');
+    checkbox.checked = !!t.done;
+    checkbox.addEventListener('change', e => {
+      t.done = e.target.checked;
+      save();
+      renderTodos();
+    });
+
+    const popover = node.querySelector('.assignment-color-popover');
+    colorDot.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = openColorPopoverId === t.id;
+      closeColorPopovers();
+      if (isOpen) return;
+      buildColorSwatches(popover, t.color, id => {
+        t.color = id;
+        save();
+        closeColorPopovers();
+        renderTodos();
+      });
+      popover.hidden = false;
+      openColorPopoverId = t.id;
+    });
+
+    node.querySelector('.todo-delete').addEventListener('click', () => {
+      state.todos = state.todos.filter(x => x.id !== t.id);
+      save();
+      renderTodos();
+    });
+
+    return node;
+  }
+
+  function sortDoneLast(list) {
+    return [...list].sort((a, b) => (a.done === b.done) ? 0 : (a.done ? 1 : -1));
+  }
+
+  function renderTodos() {
+    todoGroupsEl.innerHTML = '';
+    if (state.todos.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'Nothing on your list — add a task above.';
+      todoGroupsEl.appendChild(empty);
+      return;
+    }
+
+    const tKey = todayKey();
+    const tomorrowKey = addDays(tKey, 1);
+
+    const overdue = state.todos.filter(t => t.date && t.date < tKey).sort((a, b) => a.date.localeCompare(b.date));
+    const today = state.todos.filter(t => t.date === tKey);
+    const tomorrow = state.todos.filter(t => t.date === tomorrowKey);
+    const someday = state.todos.filter(t => !t.date);
+    const laterDates = [...new Set(state.todos.filter(t => t.date && t.date > tomorrowKey).map(t => t.date))].sort();
+
+    const groups = [
+      { title: 'Overdue', items: overdue, cls: 'is-overdue', showDate: true },
+      { title: 'Today', items: today, cls: '', showDate: false },
+      { title: 'Tomorrow', items: tomorrow, cls: '', showDate: false },
+      ...laterDates.map(d => ({ title: formatDayLabel(d), items: state.todos.filter(t => t.date === d), cls: '', showDate: false })),
+      { title: 'Someday', items: someday, cls: '', showDate: false },
+    ];
+
+    groups.forEach(group => {
+      if (group.items.length === 0) return;
+      const node = todoGroupTpl.content.firstElementChild.cloneNode(true);
+      if (group.cls) node.classList.add(group.cls);
+      node.querySelector('.assignment-group-title').textContent = group.title;
+      const list = node.querySelector('.assignment-group-list');
+      sortDoneLast(group.items).forEach(t => list.appendChild(buildTodoRow(t, tKey, group.showDate)));
+      todoGroupsEl.appendChild(node);
+    });
+  }
+
+  todoForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = todoTextInput.value.trim();
+    if (!text) return;
+    const date = todoDateInput.value || null;
+    state.todos.push({ id: uid(), text, date, done: false, color: pendingTodoColor });
+    save();
+    todoForm.reset();
+    todoDateInput.value = todayKey();
+    syncTodoChipsToDate();
+    pendingTodoColor = null;
+    refreshTodoColorRow();
+    renderTodos();
+    todoTextInput.focus();
+  });
+
   // ---------- init ----------
   renderSchedule();
   renderHabits();
   renderAssignments();
+  renderTodos();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
