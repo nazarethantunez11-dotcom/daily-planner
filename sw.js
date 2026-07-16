@@ -1,4 +1,4 @@
-const CACHE_NAME = 'the-day-v1';
+const CACHE_NAME = 'the-day-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -31,17 +31,14 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return; // let cross-origin (Google Fonts) hit the network normally
 
   event.respondWith(
-    caches.match(req).then(cached => {
-      const networkFetch = fetch(req)
-        .then(res => {
-          if (res && res.status === 200) {
-            const resClone = res.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(req, resClone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    fetch(req)
+      .then(res => {
+        if (res && res.status === 200) {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, resClone));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });
