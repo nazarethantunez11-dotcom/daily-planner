@@ -109,10 +109,14 @@ html, body {
   top: 0;
   background: var(--paper);
   z-index: 10;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
 
 .tab-btn {
-  flex: 1;
+  flex: 1 0 auto;
   background: none;
   border: none;
   color: var(--ink-faint);
@@ -125,6 +129,7 @@ html, body {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
 }
 
 .tab-btn:hover { color: var(--ink); }
@@ -137,7 +142,7 @@ html, body {
 /* Panels */
 .tab-panels { flex: 1; padding: 20px 20px 60px; width: 100%; }
 
-#panel-habits, #panel-assignments, #panel-todos { max-width: 680px; margin: 0 auto; width: 100%; }
+#panel-habits, #panel-assignments, #panel-todos, #panel-period { max-width: 680px; margin: 0 auto; width: 100%; }
 
 .schedule-controls, .schedule-view-narrow { max-width: 640px; margin: 0 auto; width: 100%; }
 #view-week, #view-month { max-width: 1040px; margin: 0 auto; width: 100%; }
@@ -1205,6 +1210,84 @@ html, body {
 .todo-date-input { flex: 1 1 140px; min-width: 0; width: auto; }
 
 .todo-groups { display: flex; flex-direction: column; }
+
+/* ---------- Period ---------- */
+.period-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.period-stat {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.period-stat-value {
+  font-family: var(--font-serif);
+  font-size: 25px;
+  font-weight: 600;
+  color: var(--ink);
+  display: block;
+  line-height: 1.2;
+}
+.period-stat-label {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+.period-summary.is-empty { grid-template-columns: 1fr; }
+.period-summary.is-empty .period-stat { text-align: center; color: var(--ink-soft); font-family: var(--font-serif); font-style: italic; font-size: 15px; }
+
+.period-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+  margin-bottom: 24px;
+}
+.period-cell {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+}
+.period-cell:hover { background: var(--surface-alt); }
+.period-cell.outside-month { color: var(--ink-faint); }
+.period-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); font-weight: 700; }
+.period-cell.is-period { background: var(--danger); color: #fff; font-weight: 600; border-color: var(--danger); }
+.period-cell.is-period:hover { opacity: 0.85; }
+.period-cell.is-predicted { border: 1.5px dashed var(--danger); color: var(--danger); font-weight: 600; }
+
+.period-history-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.period-history-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.period-history-row:last-child { border-bottom: none; }
+.period-history-row span:first-child { color: var(--ink); }
 
 .assignment-group { margin-bottom: 18px; }
 .assignment-group-title {

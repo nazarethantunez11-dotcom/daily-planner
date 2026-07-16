@@ -43,6 +43,7 @@
     <button class="tab-btn" data-tab="habits">Habits</button>
     <button class="tab-btn" data-tab="assignments">Assignments</button>
     <button class="tab-btn" data-tab="todos">To-Do</button>
+    <button class="tab-btn" data-tab="period">Period</button>
   </nav>
 
   <main class="tab-panels">
@@ -222,6 +223,31 @@
       </form>
 
       <div class="todo-groups" id="todo-groups"></div>
+    </section>
+
+    <!-- PERIOD -->
+    <section class="panel" id="panel-period">
+      <div class="panel-head">
+        <h2>Period</h2>
+      </div>
+
+      <div class="period-summary" id="period-summary"></div>
+
+      <div class="date-nav">
+        <button class="nav-arrow" id="period-prev" aria-label="Previous month">‹</button>
+        <div class="date-nav-label">
+          <span id="period-month-label"></span>
+          <button class="btn-link" id="period-today-btn" hidden>Jump to today</button>
+        </div>
+        <button class="nav-arrow" id="period-next" aria-label="Next month">›</button>
+      </div>
+
+      <p class="panel-sub">Tap a day to mark or unmark it as a period day. Dashed days are your predicted next period.</p>
+
+      <div class="month-weekday-row" id="period-weekday-row"></div>
+      <div class="period-grid" id="period-grid"></div>
+
+      <div class="period-history" id="period-history"></div>
     </section>
 
   </main>

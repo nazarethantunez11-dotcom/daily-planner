@@ -148,6 +148,9 @@
     dt.setDate(dt.getDate() - dt.getDay());
     return toDateKey(dt);
   }
+  function dayDiff(keyA, keyB) {
+    return Math.round((fromDateKey(keyB) - fromDateKey(keyA)) / 86400000);
+  }
   function daysInMonth(year, monthIdx) {
     return new Date(year, monthIdx + 1, 0).getDate();
   }
@@ -439,6 +442,7 @@
       habitLogs: (parsed && parsed.habitLogs) ? parsed.habitLogs : {},
       assignments,
       todos,
+      periodLogs: (parsed && parsed.periodLogs) ? parsed.periodLogs : {},
       scheduleView: (parsed && parsed.scheduleView) ? parsed.scheduleView : 'day',
       assignmentsView: (parsed && parsed.assignmentsView) ? parsed.assignmentsView : 'list',
       firedReminders: (parsed && parsed.firedReminders) ? parsed.firedReminders : {},
@@ -584,6 +588,7 @@
     habits: document.getElementById('panel-habits'),
     assignments: document.getElementById('panel-assignments'),
     todos: document.getElementById('panel-todos'),
+    period: document.getElementById('panel-period'),
   };
   tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2058,11 +2063,192 @@
     todoTextInput.focus();
   });
 
+  // ================= PERIOD =================
+  const periodSummaryEl = document.getElementById('period-summary');
+  const periodMonthLabel = document.getElementById('period-month-label');
+  const periodTodayBtn = document.getElementById('period-today-btn');
+  const periodWeekdayRowEl = document.getElementById('period-weekday-row');
+  const periodGridEl = document.getElementById('period-grid');
+  const periodHistoryEl = document.getElementById('period-history');
+
+  let periodViewedMonth = todayKey();
+
+  function isPeriodDay(dateKey) { return !!state.periodLogs[dateKey]; }
+  function togglePeriodDay(dateKey) {
+    if (state.periodLogs[dateKey]) delete state.periodLogs[dateKey];
+    else state.periodLogs[dateKey] = true;
+    save();
+    renderPeriod();
+  }
+
+  function derivePeriods() {
+    const days = Object.keys(state.periodLogs).sort();
+    const periods = [];
+    let current = null;
+    days.forEach(day => {
+      if (current && addDays(current.end, 1) === day) {
+        current.end = day;
+      } else {
+        if (current) periods.push(current);
+        current = { start: day, end: day };
+      }
+    });
+    if (current) periods.push(current);
+    return periods;
+  }
+
+  function computePeriodStats() {
+    const periods = derivePeriods();
+    if (periods.length === 0) {
+      return { periods, avgCycleLength: null, avgPeriodLength: null, currentCycleDay: null, predictedNext: null };
+    }
+    const avgPeriodLength = Math.round(
+      periods.reduce((sum, p) => sum + (dayDiff(p.start, p.end) + 1), 0) / periods.length
+    );
+    let avgCycleLength = null;
+    if (periods.length >= 2) {
+      const gaps = [];
+      for (let i = 1; i < periods.length; i++) gaps.push(dayDiff(periods[i - 1].start, periods[i].start));
+      avgCycleLength = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length);
+    }
+    const last = periods[periods.length - 1];
+    const currentCycleDay = dayDiff(last.start, todayKey()) + 1;
+    const predictedNext = avgCycleLength ? addDays(last.start, avgCycleLength) : null;
+    return { periods, avgCycleLength, avgPeriodLength, currentCycleDay, predictedNext, lastStart: last.start };
+  }
+
+  function renderPeriodSummary(stats) {
+    periodSummaryEl.innerHTML = '';
+    if (stats.periods.length === 0) {
+      periodSummaryEl.classList.add('is-empty');
+      const stat = document.createElement('div');
+      stat.className = 'period-stat';
+      stat.textContent = 'Tap a day below to log the start of your period — your cycle stats will build up from there.';
+      periodSummaryEl.appendChild(stat);
+      return;
+    }
+    periodSummaryEl.classList.remove('is-empty');
+
+    const cards = [];
+    cards.push({ value: `Day ${stats.currentCycleDay}`, label: 'Current cycle day' });
+    cards.push({ value: `${stats.avgPeriodLength} day${stats.avgPeriodLength === 1 ? '' : 's'}`, label: 'Avg. period length' });
+    if (stats.avgCycleLength) {
+      cards.push({ value: `${stats.avgCycleLength} days`, label: 'Avg. cycle length' });
+      const daysUntil = dayDiff(todayKey(), stats.predictedNext);
+      const untilText = daysUntil === 0 ? 'Today' : daysUntil > 0 ? `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}` : `${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? '' : 's'} late`;
+      cards.push({ value: untilText, label: 'Predicted next period' });
+    } else {
+      cards.push({ value: '—', label: 'Log one more period to see predictions' });
+    }
+
+    cards.forEach(c => {
+      const stat = document.createElement('div');
+      stat.className = 'period-stat';
+      const val = document.createElement('span');
+      val.className = 'period-stat-value';
+      val.textContent = c.value;
+      const label = document.createElement('span');
+      label.className = 'period-stat-label';
+      label.textContent = c.label;
+      stat.appendChild(val);
+      stat.appendChild(label);
+      periodSummaryEl.appendChild(stat);
+    });
+  }
+
+  function renderPeriodWeekdayRow() {
+    periodWeekdayRowEl.innerHTML = '';
+    WEEKDAY_LETTERS.forEach(l => {
+      const s = document.createElement('span');
+      s.textContent = l;
+      periodWeekdayRowEl.appendChild(s);
+    });
+  }
+
+  function renderPeriodGrid(stats) {
+    periodGridEl.innerHTML = '';
+    const d = fromDateKey(periodViewedMonth);
+    const year = d.getFullYear(), monthIdx = d.getMonth();
+    const monthStartKey = toDateKey(new Date(year, monthIdx, 1));
+    const gridStartKey = startOfWeek(monthStartKey);
+    const tKey = todayKey();
+
+    const predictedDays = new Set();
+    if (stats.predictedNext) {
+      for (let i = 0; i < stats.avgPeriodLength; i++) predictedDays.add(addDays(stats.predictedNext, i));
+    }
+
+    for (let i = 0; i < 42; i++) {
+      const cellKey = addDays(gridStartKey, i);
+      const cellDate = fromDateKey(cellKey);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'period-cell';
+      cell.textContent = cellDate.getDate();
+      cell.classList.toggle('outside-month', cellDate.getMonth() !== monthIdx);
+      cell.classList.toggle('is-today', cellKey === tKey);
+      cell.classList.toggle('is-period', isPeriodDay(cellKey));
+      cell.classList.toggle('is-predicted', !isPeriodDay(cellKey) && predictedDays.has(cellKey));
+      cell.addEventListener('click', () => togglePeriodDay(cellKey));
+      periodGridEl.appendChild(cell);
+    }
+  }
+
+  function renderPeriodHistory(stats) {
+    periodHistoryEl.innerHTML = '';
+    if (stats.periods.length === 0) return;
+    const title = document.createElement('h3');
+    title.className = 'period-history-title';
+    title.textContent = 'History';
+    periodHistoryEl.appendChild(title);
+    [...stats.periods].reverse().forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'period-history-row';
+      const range = document.createElement('span');
+      const len = dayDiff(p.start, p.end) + 1;
+      range.textContent = p.start === p.end ? formatDueDate(p.start) : `${formatDueDate(p.start)} – ${formatDueDate(p.end)}`;
+      const lenEl = document.createElement('span');
+      lenEl.textContent = `${len} day${len === 1 ? '' : 's'}`;
+      row.appendChild(range);
+      row.appendChild(lenEl);
+      periodHistoryEl.appendChild(row);
+    });
+  }
+
+  function renderPeriod() {
+    periodMonthLabel.textContent = formatMonthLabel(periodViewedMonth);
+    periodTodayBtn.hidden = startOfMonthKey(periodViewedMonth) === startOfMonthKey(todayKey());
+    const stats = computePeriodStats();
+    renderPeriodSummary(stats);
+    renderPeriodGrid(stats);
+    renderPeriodHistory(stats);
+  }
+  function startOfMonthKey(dateKey) {
+    const d = fromDateKey(dateKey);
+    return toDateKey(new Date(d.getFullYear(), d.getMonth(), 1));
+  }
+
+  document.getElementById('period-prev').addEventListener('click', () => {
+    periodViewedMonth = addMonths(periodViewedMonth, -1);
+    renderPeriod();
+  });
+  document.getElementById('period-next').addEventListener('click', () => {
+    periodViewedMonth = addMonths(periodViewedMonth, 1);
+    renderPeriod();
+  });
+  periodTodayBtn.addEventListener('click', () => {
+    periodViewedMonth = todayKey();
+    renderPeriod();
+  });
+
+  renderPeriodWeekdayRow();
+
   // ---------- init ----------
   renderSchedule();
   renderHabits();
   renderAssignments();
   renderTodos();
+  renderPeriod();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
