@@ -993,29 +993,38 @@
     return el;
   }
 
+  function buildEarlierDivider() {
+    const el = document.createElement('div');
+    el.className = 'day-earlier-divider';
+    el.textContent = 'Earlier today';
+    return el;
+  }
+
   function renderDayView() {
     dayEventsListEl.innerHTML = '';
-    const events = getEventsForDate(selectedDate);
+    let events = getEventsForDate(selectedDate);
     const isToday = selectedDate === todayKey();
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
-    if (events.length === 0) {
+    let endedEvents = [];
+    if (isToday) {
+      const active = [];
+      events.forEach(ev => {
+        if (!ev.allDay && minutesFromHHMM(ev.end) < nowMin) endedEvents.push(ev);
+        else active.push(ev);
+      });
+      events = active;
+    }
+
+    if (events.length === 0 && endedEvents.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
       empty.textContent = 'Nothing scheduled — add an event below.';
       dayEventsListEl.appendChild(empty);
       if (isToday) dayEventsListEl.appendChild(buildNowMarker(nowMin));
     } else {
-      let markerPlaced = false;
-      events.forEach(ev => {
-        if (isToday && !ev.allDay && !markerPlaced) {
-          const startMin = minutesFromHHMM(ev.start);
-          if (nowMin < startMin) {
-            dayEventsListEl.appendChild(buildNowMarker(nowMin));
-            markerPlaced = true;
-          }
-        }
+      function buildEventRow(ev) {
         const node = dayEventTpl.content.firstElementChild.cloneNode(true);
         node.querySelector('.day-event-time').textContent = ev.allDay ? 'All day' : `${formatTimeShort(ev.start)}\n${formatTimeShort(ev.end)}`;
         node.querySelector('.day-event-title').textContent = ev.title;
@@ -1035,9 +1044,30 @@
           node.querySelector('.day-event-main').appendChild(rel);
         }
         node.addEventListener('click', () => openEditModal(ev.id, ev.occurrenceDate));
-        dayEventsListEl.appendChild(node);
+        return node;
+      }
+
+      let markerPlaced = false;
+      events.forEach(ev => {
+        if (isToday && !ev.allDay && !markerPlaced) {
+          const startMin = minutesFromHHMM(ev.start);
+          if (nowMin < startMin) {
+            dayEventsListEl.appendChild(buildNowMarker(nowMin));
+            markerPlaced = true;
+          }
+        }
+        dayEventsListEl.appendChild(buildEventRow(ev));
       });
       if (isToday && !markerPlaced) dayEventsListEl.appendChild(buildNowMarker(nowMin));
+
+      if (endedEvents.length > 0) {
+        dayEventsListEl.appendChild(buildEarlierDivider());
+        endedEvents.forEach(ev => {
+          const node = buildEventRow(ev);
+          node.classList.add('is-ended');
+          dayEventsListEl.appendChild(node);
+        });
+      }
     }
 
     if (isToday) {
