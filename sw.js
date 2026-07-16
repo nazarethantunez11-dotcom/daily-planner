@@ -12,7 +12,11 @@ const CORE_ASSETS = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then(cache => Promise.all(CORE_ASSETS.map(url =>
+        fetch(url, { cache: 'no-store' }).then(res => res.ok && cache.put(url, res))
+      )))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -31,7 +35,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return; // let cross-origin (Google Fonts) hit the network normally
 
   event.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-store' })
       .then(res => {
         if (res && res.status === 200) {
           const resClone = res.clone();

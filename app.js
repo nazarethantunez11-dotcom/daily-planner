@@ -2097,10 +2097,12 @@
     return periods;
   }
 
+  const PREDICTED_CYCLES_AHEAD = 12;
+
   function computePeriodStats() {
     const periods = derivePeriods();
     if (periods.length === 0) {
-      return { periods, avgCycleLength: null, avgPeriodLength: null, currentCycleDay: null, predictedNext: null };
+      return { periods, avgCycleLength: null, avgPeriodLength: null, currentCycleDay: null, predictedNext: null, predictedWindows: [] };
     }
     const avgPeriodLength = Math.round(
       periods.reduce((sum, p) => sum + (dayDiff(p.start, p.end) + 1), 0) / periods.length
@@ -2113,8 +2115,18 @@
     }
     const last = periods[periods.length - 1];
     const currentCycleDay = dayDiff(last.start, todayKey()) + 1;
-    const predictedNext = avgCycleLength ? addDays(last.start, avgCycleLength) : null;
-    return { periods, avgCycleLength, avgPeriodLength, currentCycleDay, predictedNext, lastStart: last.start };
+
+    // Project several cycles ahead (not just the next one) so predictions still
+    // show up no matter how far into the future the calendar is navigated.
+    const predictedWindows = [];
+    if (avgCycleLength) {
+      for (let i = 1; i <= PREDICTED_CYCLES_AHEAD; i++) {
+        const start = addDays(last.start, avgCycleLength * i);
+        predictedWindows.push({ start, end: addDays(start, avgPeriodLength - 1) });
+      }
+    }
+    const predictedNext = predictedWindows.length ? predictedWindows[0].start : null;
+    return { periods, avgCycleLength, avgPeriodLength, currentCycleDay, predictedNext, predictedWindows, lastStart: last.start };
   }
 
   function renderPeriodSummary(stats) {
@@ -2135,8 +2147,8 @@
     if (stats.avgCycleLength) {
       cards.push({ value: `${stats.avgCycleLength} days`, label: 'Avg. cycle length' });
       const daysUntil = dayDiff(todayKey(), stats.predictedNext);
-      const untilText = daysUntil === 0 ? 'Today' : daysUntil > 0 ? `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}` : `${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? '' : 's'} late`;
-      cards.push({ value: untilText, label: 'Predicted next period' });
+      const sub = daysUntil === 0 ? 'Today' : daysUntil > 0 ? `In ${daysUntil} day${daysUntil === 1 ? '' : 's'}` : `${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? '' : 's'} late`;
+      cards.push({ value: formatDueDate(stats.predictedNext), label: 'Predicted next period', sub });
     } else {
       cards.push({ value: '—', label: 'Log one more period to see predictions' });
     }
@@ -2152,6 +2164,12 @@
       label.textContent = c.label;
       stat.appendChild(val);
       stat.appendChild(label);
+      if (c.sub) {
+        const sub = document.createElement('span');
+        sub.className = 'period-stat-sub';
+        sub.textContent = c.sub;
+        stat.appendChild(sub);
+      }
       periodSummaryEl.appendChild(stat);
     });
   }
@@ -2174,9 +2192,9 @@
     const tKey = todayKey();
 
     const predictedDays = new Set();
-    if (stats.predictedNext) {
-      for (let i = 0; i < stats.avgPeriodLength; i++) predictedDays.add(addDays(stats.predictedNext, i));
-    }
+    stats.predictedWindows.forEach(w => {
+      for (let i = 0; i < stats.avgPeriodLength; i++) predictedDays.add(addDays(w.start, i));
+    });
 
     for (let i = 0; i < 42; i++) {
       const cellKey = addDays(gridStartKey, i);
