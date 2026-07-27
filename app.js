@@ -4,7 +4,7 @@
   const STORAGE_KEY = 'planner.v4';
   const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const HOUR_PX = 48;
+  const HOUR_PX = 60;
   const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
   const COLOR_PALETTE = [
@@ -1173,15 +1173,22 @@
         block.dataset.endMin = String(item.endMin);
         block.dataset.title = item.ev.title;
         const top = (item.startMin / 60) * HOUR_PX;
-        const height = Math.max(((item.endMin - item.startMin) / 60) * HOUR_PX, 18);
+        const trueHeight = ((item.endMin - item.startMin) / 60) * HOUR_PX;
+        // Below ~32px there isn't room for a title + time line without clipping. Rather
+        // than pad the box taller (which would visually run into the next back-to-back
+        // event), drop the time line and only floor the height enough for one line.
+        const isCompact = trueHeight < 32;
+        const height = Math.max(trueHeight, isCompact ? 16 : 32);
         const widthPct = 100 / item.totalCols;
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
         block.style.left = `${item.colIndex * widthPct}%`;
         block.style.width = `calc(${widthPct}% - 2px)`;
+        block.classList.toggle('is-compact', isCompact);
         const hex = colorHex(item.ev.color);
         if (hex) block.style.background = hex;
-        block.innerHTML = `<span class="we-title">${escapeHtml(item.ev.title)}</span><span class="we-time">${formatTimeShort(item.ev.start)} – ${formatTimeShort(item.ev.end)}</span>`;
+        const timeSpan = isCompact ? '' : `<span class="we-time">${formatTimeShort(item.ev.start)} – ${formatTimeShort(item.ev.end)}</span>`;
+        block.innerHTML = `<span class="we-title">${escapeHtml(item.ev.title)}</span>${timeSpan}`;
         col.appendChild(block);
       });
 

@@ -36,7 +36,7 @@ html, body {
 ::selection { background: var(--accent-bg); color: var(--ink); }
 
 .app {
-  max-width: 1080px;
+  max-width: 1440px;
   margin: 0 auto;
   min-height: 100vh;
   display: flex;
@@ -145,7 +145,7 @@ html, body {
 #panel-habits, #panel-assignments, #panel-todos, #panel-period { max-width: 680px; margin: 0 auto; width: 100%; }
 
 .schedule-controls, .schedule-view-narrow { max-width: 640px; margin: 0 auto; width: 100%; }
-#view-week, #view-month { max-width: 1040px; margin: 0 auto; width: 100%; }
+#view-week, #view-month { max-width: 1400px; margin: 0 auto; width: 100%; }
 
 .panel { display: none; animation: fade-in 0.2s ease; }
 .panel.active { display: block; }
@@ -410,7 +410,7 @@ html, body {
 .day-event-repeat:empty, .day-event-repeat[hidden] { display: none; }
 
 /* ---------- Schedule: Week hour grid ---------- */
-:root { --hour-px: 48px; }
+:root { --hour-px: 60px; }
 
 .whg { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 
@@ -460,7 +460,7 @@ html, body {
   white-space: nowrap;
 }
 
-.whg-body { display: flex; overflow-y: auto; overflow-x: auto; max-height: 62vh; }
+.whg-body { display: flex; overflow-y: auto; overflow-x: auto; max-height: 74vh; }
 
 .whg-gutter { width: 46px; flex-shrink: 0; position: relative; background: var(--paper); }
 .whg-hour-label {
@@ -508,6 +508,8 @@ html, body {
 .whg-event:active { cursor: grabbing; }
 .whg-event .we-title { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whg-event .we-time { display: block; opacity: 0.75; font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whg-event.is-compact { padding: 1px 6px; display: flex; align-items: center; }
+.whg-event.is-compact .we-title { line-height: 1.15; }
 .whg-event.dragging-source { opacity: 0.35; }
 .whg-event-ghost { position: fixed; z-index: 999; pointer-events: none; opacity: 0.9; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
 
