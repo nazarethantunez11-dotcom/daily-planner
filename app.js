@@ -934,6 +934,7 @@
     week: document.getElementById('view-week'),
     month: document.getElementById('view-month'),
     year: document.getElementById('view-year'),
+    agenda: document.getElementById('view-agenda'),
   };
 
   function setScheduleView(v) {
@@ -951,13 +952,13 @@
   });
 
   document.getElementById('sched-prev').addEventListener('click', () => {
-    if (scheduleView === 'day') setSelectedDate(addDays(selectedDate, -1));
+    if (scheduleView === 'day' || scheduleView === 'agenda') setSelectedDate(addDays(selectedDate, -1));
     else if (scheduleView === 'week') setSelectedDate(addWeeks(selectedDate, -1));
     else if (scheduleView === 'month') setSelectedDate(addMonths(selectedDate, -1));
     else setSelectedDate(addYears(selectedDate, -1));
   });
   document.getElementById('sched-next').addEventListener('click', () => {
-    if (scheduleView === 'day') setSelectedDate(addDays(selectedDate, 1));
+    if (scheduleView === 'day' || scheduleView === 'agenda') setSelectedDate(addDays(selectedDate, 1));
     else if (scheduleView === 'week') setSelectedDate(addWeeks(selectedDate, 1));
     else if (scheduleView === 'month') setSelectedDate(addMonths(selectedDate, 1));
     else setSelectedDate(addYears(selectedDate, 1));
@@ -969,6 +970,7 @@
     if (scheduleView === 'day') schedDateLabel.textContent = formatDayLabel(selectedDate);
     else if (scheduleView === 'week') schedDateLabel.textContent = formatWeekLabel(selectedDate);
     else if (scheduleView === 'month') schedDateLabel.textContent = formatMonthLabel(selectedDate);
+    else if (scheduleView === 'agenda') schedDateLabel.textContent = `From ${formatDayLabel(selectedDate)}`;
     else schedDateLabel.textContent = formatYearLabel(selectedDate);
 
     schedTodayBtn.hidden = selectedDate === todayKey();
@@ -978,6 +980,7 @@
     if (scheduleView === 'day') renderDayView();
     else if (scheduleView === 'week') renderWeekView();
     else if (scheduleView === 'month') { renderMonthWeekdayRow(); renderMonthView(); }
+    else if (scheduleView === 'agenda') renderAgendaView();
     else renderYearView();
   }
 
@@ -1017,6 +1020,29 @@
     return el;
   }
 
+  function buildEventRow(ev, dayIsToday, nowMin) {
+    const node = dayEventTpl.content.firstElementChild.cloneNode(true);
+    node.querySelector('.day-event-time').textContent = ev.allDay ? 'All day' : `${formatTimeShort(ev.start)}\n${formatTimeShort(ev.end)}`;
+    node.querySelector('.day-event-title').textContent = ev.title;
+    node.querySelector('.day-event-loc').textContent = ev.location || '';
+    node.querySelector('.day-event-repeat').hidden = ev.repeat.type === 'none';
+    const hex = colorHex(ev.color);
+    if (hex) {
+      node.style.borderLeftWidth = '4px';
+      node.style.borderLeftColor = hex;
+      node.querySelector('.day-event-time').style.color = hex;
+    }
+    if (dayIsToday && !ev.allDay) {
+      const startMin = minutesFromHHMM(ev.start), endMin = minutesFromHHMM(ev.end);
+      const rel = document.createElement('span');
+      rel.className = 'day-event-relative';
+      rel.textContent = relativeTimeLabel(nowMin, startMin, endMin);
+      node.querySelector('.day-event-main').appendChild(rel);
+    }
+    node.addEventListener('click', () => openEditModal(ev.id, ev.occurrenceDate));
+    return node;
+  }
+
   function renderDayView() {
     renderDayTasks();
     dayEventsListEl.innerHTML = '';
@@ -1042,29 +1068,6 @@
       dayEventsListEl.appendChild(empty);
       if (isToday) dayEventsListEl.appendChild(buildNowMarker(nowMin));
     } else {
-      function buildEventRow(ev) {
-        const node = dayEventTpl.content.firstElementChild.cloneNode(true);
-        node.querySelector('.day-event-time').textContent = ev.allDay ? 'All day' : `${formatTimeShort(ev.start)}\n${formatTimeShort(ev.end)}`;
-        node.querySelector('.day-event-title').textContent = ev.title;
-        node.querySelector('.day-event-loc').textContent = ev.location || '';
-        node.querySelector('.day-event-repeat').hidden = ev.repeat.type === 'none';
-        const hex = colorHex(ev.color);
-        if (hex) {
-          node.style.borderLeftWidth = '4px';
-          node.style.borderLeftColor = hex;
-          node.querySelector('.day-event-time').style.color = hex;
-        }
-        if (isToday && !ev.allDay) {
-          const startMin = minutesFromHHMM(ev.start), endMin = minutesFromHHMM(ev.end);
-          const rel = document.createElement('span');
-          rel.className = 'day-event-relative';
-          rel.textContent = relativeTimeLabel(nowMin, startMin, endMin);
-          node.querySelector('.day-event-main').appendChild(rel);
-        }
-        node.addEventListener('click', () => openEditModal(ev.id, ev.occurrenceDate));
-        return node;
-      }
-
       let markerPlaced = false;
       events.forEach(ev => {
         if (isToday && !ev.allDay && !markerPlaced) {
@@ -1074,14 +1077,14 @@
             markerPlaced = true;
           }
         }
-        dayEventsListEl.appendChild(buildEventRow(ev));
+        dayEventsListEl.appendChild(buildEventRow(ev, isToday, nowMin));
       });
       if (isToday && !markerPlaced) dayEventsListEl.appendChild(buildNowMarker(nowMin));
 
       if (endedEvents.length > 0) {
         dayEventsListEl.appendChild(buildEarlierDivider());
         endedEvents.forEach(ev => {
-          const node = buildEventRow(ev);
+          const node = buildEventRow(ev, isToday, nowMin);
           node.classList.add('is-ended');
           dayEventsListEl.appendChild(node);
         });
@@ -1447,6 +1450,54 @@
         grid.appendChild(btn);
       }
       yearGridEl.appendChild(node);
+    }
+  }
+
+  // ---- Agenda view ----
+  const AGENDA_WINDOW_DAYS = 60;
+  const agendaListEl = document.getElementById('agenda-list');
+
+  function renderAgendaView() {
+    agendaListEl.innerHTML = '';
+    const tKey = todayKey();
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    let anyContent = false;
+
+    for (let i = 0; i < AGENDA_WINDOW_DAYS; i++) {
+      const dayKey = addDays(selectedDate, i);
+      const dayEvents = getEventsForDate(dayKey);
+      const dayTodos = state.todos.filter(t => t.date === dayKey);
+      if (dayEvents.length === 0 && dayTodos.length === 0) continue;
+      anyContent = true;
+      const dayIsToday = dayKey === tKey;
+
+      const section = document.createElement('div');
+      section.className = 'agenda-day';
+
+      const header = document.createElement('h3');
+      header.className = 'agenda-day-title';
+      header.textContent = formatDayLabel(dayKey);
+      header.classList.toggle('is-today', dayIsToday);
+      section.appendChild(header);
+
+      if (dayTodos.length > 0) {
+        const tasksWrap = document.createElement('div');
+        tasksWrap.className = 'agenda-tasks';
+        sortDoneLast(dayTodos).forEach(t => tasksWrap.appendChild(buildTodoRow(t, tKey, false)));
+        section.appendChild(tasksWrap);
+      }
+
+      dayEvents.forEach(ev => section.appendChild(buildEventRow(ev, dayIsToday, nowMin)));
+
+      agendaListEl.appendChild(section);
+    }
+
+    if (!anyContent) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = `Nothing scheduled in the next ${AGENDA_WINDOW_DAYS} days.`;
+      agendaListEl.appendChild(empty);
     }
   }
 
