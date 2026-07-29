@@ -443,7 +443,7 @@
       assignments,
       todos,
       periodLogs: (parsed && parsed.periodLogs) ? parsed.periodLogs : {},
-      scheduleView: (parsed && parsed.scheduleView) ? parsed.scheduleView : 'day',
+      scheduleView: (parsed && ['day', 'week', 'month', 'year'].includes(parsed.scheduleView)) ? parsed.scheduleView : 'day',
       assignmentsView: (parsed && parsed.assignmentsView) ? parsed.assignmentsView : 'list',
       firedReminders: (parsed && parsed.firedReminders) ? parsed.firedReminders : {},
     };
@@ -934,7 +934,6 @@
     week: document.getElementById('view-week'),
     month: document.getElementById('view-month'),
     year: document.getElementById('view-year'),
-    agenda: document.getElementById('view-agenda'),
   };
 
   function setScheduleView(v) {
@@ -952,13 +951,13 @@
   });
 
   document.getElementById('sched-prev').addEventListener('click', () => {
-    if (scheduleView === 'day' || scheduleView === 'agenda') setSelectedDate(addDays(selectedDate, -1));
+    if (scheduleView === 'day') setSelectedDate(addDays(selectedDate, -1));
     else if (scheduleView === 'week') setSelectedDate(addWeeks(selectedDate, -1));
     else if (scheduleView === 'month') setSelectedDate(addMonths(selectedDate, -1));
     else setSelectedDate(addYears(selectedDate, -1));
   });
   document.getElementById('sched-next').addEventListener('click', () => {
-    if (scheduleView === 'day' || scheduleView === 'agenda') setSelectedDate(addDays(selectedDate, 1));
+    if (scheduleView === 'day') setSelectedDate(addDays(selectedDate, 1));
     else if (scheduleView === 'week') setSelectedDate(addWeeks(selectedDate, 1));
     else if (scheduleView === 'month') setSelectedDate(addMonths(selectedDate, 1));
     else setSelectedDate(addYears(selectedDate, 1));
@@ -970,7 +969,6 @@
     if (scheduleView === 'day') schedDateLabel.textContent = formatDayLabel(selectedDate);
     else if (scheduleView === 'week') schedDateLabel.textContent = formatWeekLabel(selectedDate);
     else if (scheduleView === 'month') schedDateLabel.textContent = formatMonthLabel(selectedDate);
-    else if (scheduleView === 'agenda') schedDateLabel.textContent = `From ${formatDayLabel(selectedDate)}`;
     else schedDateLabel.textContent = formatYearLabel(selectedDate);
 
     schedTodayBtn.hidden = selectedDate === todayKey();
@@ -980,7 +978,6 @@
     if (scheduleView === 'day') renderDayView();
     else if (scheduleView === 'week') renderWeekView();
     else if (scheduleView === 'month') { renderMonthWeekdayRow(); renderMonthView(); }
-    else if (scheduleView === 'agenda') renderAgendaView();
     else renderYearView();
   }
 
@@ -1450,54 +1447,6 @@
         grid.appendChild(btn);
       }
       yearGridEl.appendChild(node);
-    }
-  }
-
-  // ---- Agenda view ----
-  const AGENDA_WINDOW_DAYS = 60;
-  const agendaListEl = document.getElementById('agenda-list');
-
-  function renderAgendaView() {
-    agendaListEl.innerHTML = '';
-    const tKey = todayKey();
-    const now = new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    let anyContent = false;
-
-    for (let i = 0; i < AGENDA_WINDOW_DAYS; i++) {
-      const dayKey = addDays(selectedDate, i);
-      const dayEvents = getEventsForDate(dayKey);
-      const dayTodos = state.todos.filter(t => t.date === dayKey);
-      if (dayEvents.length === 0 && dayTodos.length === 0) continue;
-      anyContent = true;
-      const dayIsToday = dayKey === tKey;
-
-      const section = document.createElement('div');
-      section.className = 'agenda-day';
-
-      const header = document.createElement('h3');
-      header.className = 'agenda-day-title';
-      header.textContent = formatDayLabel(dayKey);
-      header.classList.toggle('is-today', dayIsToday);
-      section.appendChild(header);
-
-      if (dayTodos.length > 0) {
-        const tasksWrap = document.createElement('div');
-        tasksWrap.className = 'agenda-tasks';
-        sortDoneLast(dayTodos).forEach(t => tasksWrap.appendChild(buildTodoRow(t, tKey, false)));
-        section.appendChild(tasksWrap);
-      }
-
-      dayEvents.forEach(ev => section.appendChild(buildEventRow(ev, dayIsToday, nowMin)));
-
-      agendaListEl.appendChild(section);
-    }
-
-    if (!anyContent) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.textContent = `Nothing scheduled in the next ${AGENDA_WINDOW_DAYS} days.`;
-      agendaListEl.appendChild(empty);
     }
   }
 

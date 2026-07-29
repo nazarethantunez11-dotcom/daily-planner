@@ -372,21 +372,6 @@ html, body {
   padding: 10px 4px 2px;
 }
 
-/* ---------- Agenda view ---------- */
-.agenda-list { display: flex; flex-direction: column; gap: 22px; }
-.agenda-day { display: flex; flex-direction: column; gap: 8px; }
-.agenda-day-title {
-  font-family: var(--font-serif);
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--ink);
-  margin: 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
-.agenda-day-title.is-today { color: var(--accent-strong); }
-.agenda-tasks { display: flex; flex-direction: column; gap: 8px; }
-
 .day-event-relative {
   font-size: 10.5px;
   color: var(--ink-faint);
