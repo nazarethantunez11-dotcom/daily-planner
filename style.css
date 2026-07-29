@@ -329,6 +329,15 @@ html, body {
 /* ---------- Schedule: Day view ---------- */
 .view-day-head { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
+.day-tasks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.day-tasks-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 2px;
+}
+
 .day-events-list { display: flex; flex-direction: column; gap: 8px; }
 
 .day-event {

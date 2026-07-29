@@ -983,8 +983,25 @@
 
   // ---- Day view ----
   const dayEventsListEl = document.getElementById('day-events-list');
+  const dayTasksEl = document.getElementById('day-tasks');
   let dayTickInterval = null;
   function clearDayTick() { if (dayTickInterval) { clearInterval(dayTickInterval); dayTickInterval = null; } }
+
+  // Surfaces the selected day's to-dos inline in the Day view, so tasks and
+  // timed events live in one place instead of only showing up in the To-Do tab.
+  function renderDayTasks() {
+    if (!dayTasksEl) return;
+    const dayTodos = state.todos.filter(t => t.date === selectedDate);
+    dayTasksEl.innerHTML = '';
+    if (dayTodos.length === 0) { dayTasksEl.hidden = true; return; }
+    dayTasksEl.hidden = false;
+    const title = document.createElement('h3');
+    title.className = 'day-tasks-title';
+    title.textContent = 'Tasks';
+    dayTasksEl.appendChild(title);
+    const tKey = todayKey();
+    sortDoneLast(dayTodos).forEach(t => dayTasksEl.appendChild(buildTodoRow(t, tKey, false)));
+  }
 
   function buildNowMarker(nowMin) {
     const el = document.createElement('div');
@@ -1001,6 +1018,7 @@
   }
 
   function renderDayView() {
+    renderDayTasks();
     dayEventsListEl.innerHTML = '';
     let events = getEventsForDate(selectedDate);
     const isToday = selectedDate === todayKey();
@@ -2047,6 +2065,7 @@
   }
 
   function renderTodos() {
+    renderDayTasks();
     todoGroupsEl.innerHTML = '';
     if (state.todos.length === 0) {
       const empty = document.createElement('div');
