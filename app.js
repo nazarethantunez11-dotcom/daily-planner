@@ -1672,7 +1672,7 @@
       node.querySelector('.habit-freq-badge').textContent = freqBadgeText(habit.frequency);
       node.querySelector('.habit-time-badge').textContent = habit.time ? formatTimeShort(habit.time) : '';
       const startBadge = node.querySelector('.habit-start-badge');
-      startBadge.textContent = habit.startDate ? `From ${formatDueDate(habit.startDate)}` : '';
+      startBadge.textContent = (habit.startDate && habit.startDate !== todayKey()) ? `From ${formatDueDate(habit.startDate)}` : '';
 
       const checkbox = node.querySelector('.habit-checkbox');
       checkbox.checked = doneToday;
