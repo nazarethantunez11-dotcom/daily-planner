@@ -127,6 +127,10 @@
           <span class="freq-days-optional-label">Only on:</span>
           <div class="freq-days-optional-chips" id="habit-freq-weekly-days-chips"></div>
         </div>
+        <div class="habit-form-start">
+          <label class="ev-label" for="habit-start-date">Start date</label>
+          <input type="date" id="habit-start-date">
+        </div>
         <div class="habit-form-time">
           <input type="time" id="habit-time-input" placeholder="Time (optional)">
           <label class="remind-toggle" id="habit-remind-wrap" hidden>
@@ -403,11 +407,13 @@
         <input type="checkbox" class="habit-checkbox">
         <span class="habit-check-mark"></span>
       </label>
+      <input type="number" class="habit-count-input" min="1" max="99" hidden aria-label="Times done today">
       <div class="habit-card-info">
         <div class="habit-display">
           <span class="habit-name"></span>
           <span class="habit-time-badge"></span>
           <span class="habit-freq-badge"></span>
+          <span class="habit-start-badge"></span>
         </div>
         <div class="habit-edit-fields" hidden>
           <input type="text" class="habit-edit-name" placeholder="Habit name">
@@ -427,6 +433,10 @@
             <span class="freq-days-optional-label">Only on:</span>
             <div class="freq-days-optional-chips habit-edit-freq-weekly-days-chips"></div>
           </div>
+          <div class="habit-form-start">
+            <label class="ev-label">Start date</label>
+            <input type="date" class="habit-edit-start-date">
+          </div>
           <div class="habit-edit-time-row">
             <input type="time" class="habit-edit-time">
             <label class="remind-toggle habit-edit-remind-wrap">
@@ -438,6 +448,8 @@
         <span class="habit-stat"></span>
         <span class="habit-substat"></span>
         <span class="habit-not-scheduled">Not scheduled today</span>
+        <button type="button" class="habit-note-toggle">+ Note</button>
+        <textarea class="habit-note-input" hidden placeholder="Add a note for this day…" rows="2"></textarea>
       </div>
       <div class="habit-card-actions">
         <div class="habit-actions-view">

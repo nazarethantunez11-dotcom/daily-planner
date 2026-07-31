@@ -39,6 +39,7 @@ html, body {
   max-width: 1440px;
   margin: 0 auto;
   min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   flex-direction: column;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -473,7 +474,17 @@ html, body {
   white-space: nowrap;
 }
 
-.whg-body { display: flex; overflow-y: auto; overflow-x: auto; max-height: 74vh; }
+.whg-body {
+  display: flex;
+  overflow-y: auto;
+  overflow-x: auto;
+  max-height: 74vh;
+  /* svh (small viewport height) ignores mobile browser chrome show/hide, unlike
+     plain vh which recalculates mid-scroll on iOS Safari and makes the grid
+     visibly resize/jump while scrolling. Falls back to the vh line above on
+     browsers that don't support svh. */
+  max-height: 74svh;
+}
 
 .whg-gutter { width: 46px; flex-shrink: 0; position: relative; background: var(--paper); }
 .whg-hour-label {
@@ -558,7 +569,7 @@ html, body {
 
 .month-cell {
   background: var(--paper);
-  min-height: 84px;
+  height: 84px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -619,7 +630,7 @@ html, body {
 .month-cell-more:hover { color: var(--ink); }
 
 @media (min-width: 760px) {
-  .month-cell { min-height: 110px; padding: 7px 6px 8px; }
+  .month-cell { height: 110px; padding: 7px 6px 8px; }
   .month-cell-num { width: 26px; height: 26px; font-size: 13.5px; }
 }
 
@@ -735,6 +746,7 @@ html, body {
   width: 100%;
   max-width: 480px;
   max-height: 92vh;
+  max-height: 92svh;
   overflow-y: auto;
   border-radius: var(--radius) var(--radius) 0 0;
   padding: 22px 20px 18px;
@@ -874,7 +886,7 @@ html, body {
   margin-bottom: 14px;
 }
 
-.import-review-list { display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto; margin-bottom: 14px; }
+.import-review-list { display: flex; flex-direction: column; gap: 10px; max-height: 50vh; max-height: 50svh; overflow-y: auto; margin-bottom: 14px; }
 
 .import-row {
   display: flex;
@@ -1023,6 +1035,18 @@ html, body {
   padding: 8px 9px;
 }
 
+.habit-form-start { display: flex; align-items: center; gap: 10px; flex-basis: 100%; }
+.habit-form-start .ev-label { margin-bottom: 0; }
+.habit-form-start input[type="date"] {
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 8px 9px;
+}
+
 #habit-name-input {
   background: var(--paper);
   border: 1px solid var(--border-strong);
@@ -1091,6 +1115,21 @@ html, body {
   outline-offset: 2px;
 }
 
+.habit-count-input {
+  width: 40px;
+  flex-shrink: 0;
+  margin-top: -2px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 5px 2px;
+}
+
 .habit-card-info {
   display: flex;
   flex-direction: column;
@@ -1122,6 +1161,14 @@ html, body {
 }
 .habit-time-badge:empty { display: none; }
 
+.habit-start-badge {
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+  font-style: italic;
+}
+.habit-start-badge:empty { display: none; }
+
 .habit-stat {
   font-size: 11.5px;
   color: var(--ink-soft);
@@ -1146,6 +1193,35 @@ html, body {
   display: none;
 }
 .habit-card.not-scheduled .habit-not-scheduled { display: block; }
+
+.habit-note-toggle {
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 4px;
+  text-align: left;
+  align-self: flex-start;
+}
+.habit-note-toggle:hover { color: var(--ink-soft); }
+.habit-note-toggle.has-note { color: var(--accent-strong); font-weight: 600; }
+
+.habit-note-input {
+  margin-top: 6px;
+  width: 100%;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 8px 9px;
+  resize: vertical;
+}
 
 .habit-edit-fields { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 4px; }
 .habit-edit-name {

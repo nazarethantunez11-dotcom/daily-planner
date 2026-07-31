@@ -418,6 +418,7 @@
       if (h.frequency.type === 'days' && !Array.isArray(h.frequency.days)) h.frequency.days = [new Date().getDay()];
       if (h.frequency.type === 'weekly' && !Array.isArray(h.frequency.days)) h.frequency.days = [];
       if (h.time === undefined) h.time = null;
+      if (h.startDate === undefined) h.startDate = null;
       if (!h.reminder) h.reminder = { enabled: false };
     });
 
@@ -436,10 +437,27 @@
       if (t.done === undefined) t.done = false;
     });
 
+    const habitLogs = (parsed && parsed.habitLogs) ? parsed.habitLogs : {};
+    Object.keys(habitLogs).forEach(dateKey => {
+      const day = habitLogs[dateKey];
+      Object.keys(day).forEach(habitId => {
+        const entry = day[habitId];
+        if (entry === true) {
+          day[habitId] = { done: true, count: 1, note: '' };
+        } else if (entry && typeof entry === 'object') {
+          if (entry.done === undefined) entry.done = true;
+          if (entry.count === undefined) entry.count = 1;
+          if (entry.note === undefined) entry.note = '';
+        } else {
+          delete day[habitId];
+        }
+      });
+    });
+
     return {
       events,
       habits,
-      habitLogs: (parsed && parsed.habitLogs) ? parsed.habitLogs : {},
+      habitLogs,
       assignments,
       todos,
       periodLogs: (parsed && parsed.periodLogs) ? parsed.periodLogs : {},
@@ -475,13 +493,58 @@
   }
 
   // ---------- habit logs ----------
+  // Each entry is { done, count, note }. An entry is pruned from storage
+  // entirely once done=false, count=0, and note is empty, so old boolean-only
+  // days (pre-count/note) stay compact after migration.
+  function getHabitEntry(habitId, dateKey) {
+    return (state.habitLogs[dateKey] && state.habitLogs[dateKey][habitId]) || null;
+  }
   function isDone(habitId, dateKey) {
-    return !!(state.habitLogs[dateKey] && state.habitLogs[dateKey][habitId]);
+    const e = getHabitEntry(habitId, dateKey);
+    return !!(e && e.done);
+  }
+  function getHabitCount(habitId, dateKey) {
+    const e = getHabitEntry(habitId, dateKey);
+    return (e && e.count) || 0;
+  }
+  function getHabitNote(habitId, dateKey) {
+    const e = getHabitEntry(habitId, dateKey);
+    return (e && e.note) || '';
+  }
+  function pruneHabitEntryIfEmpty(dateKey, habitId) {
+    const day = state.habitLogs[dateKey];
+    if (!day) return;
+    const e = day[habitId];
+    if (e && !e.done && !e.count && !e.note) {
+      delete day[habitId];
+      if (Object.keys(day).length === 0) delete state.habitLogs[dateKey];
+    }
   }
   function setDone(habitId, dateKey, val) {
     if (!state.habitLogs[dateKey]) state.habitLogs[dateKey] = {};
-    if (val) state.habitLogs[dateKey][habitId] = true;
-    else delete state.habitLogs[dateKey][habitId];
+    const existing = state.habitLogs[dateKey][habitId] || { done: false, count: 0, note: '' };
+    existing.done = !!val;
+    existing.count = val ? (existing.count > 0 ? existing.count : 1) : 0;
+    state.habitLogs[dateKey][habitId] = existing;
+    pruneHabitEntryIfEmpty(dateKey, habitId);
+    save();
+  }
+  function setHabitCount(habitId, dateKey, count) {
+    count = Math.max(0, Math.min(99, Math.round(count) || 0));
+    if (!state.habitLogs[dateKey]) state.habitLogs[dateKey] = {};
+    const existing = state.habitLogs[dateKey][habitId] || { done: false, count: 0, note: '' };
+    existing.count = count;
+    existing.done = count > 0;
+    state.habitLogs[dateKey][habitId] = existing;
+    pruneHabitEntryIfEmpty(dateKey, habitId);
+    save();
+  }
+  function setHabitNote(habitId, dateKey, note) {
+    if (!state.habitLogs[dateKey]) state.habitLogs[dateKey] = {};
+    const existing = state.habitLogs[dateKey][habitId] || { done: false, count: 0, note: '' };
+    existing.note = note.trim();
+    state.habitLogs[dateKey][habitId] = existing;
+    pruneHabitEntryIfEmpty(dateKey, habitId);
     save();
   }
   function habitRestrictedDays(habit) {
@@ -492,6 +555,9 @@
   function isHabitScheduledOnWeekday(habit, weekday) {
     const restricted = habitRestrictedDays(habit);
     return !restricted || restricted.includes(weekday);
+  }
+  function hasHabitStarted(habit, dateKey) {
+    return !habit.startDate || habit.startDate <= dateKey;
   }
   function weeklyProgress(habit, dateKey) {
     const start = startOfWeek(dateKey);
@@ -1325,7 +1391,7 @@
   // ---- Month view ----
   const monthWeekdayRowEl = document.getElementById('month-weekday-row');
   const monthGridEl = document.getElementById('month-grid');
-  const MONTH_PILL_LIMIT = 3;
+  const MONTH_PILL_LIMIT = 2;
 
   function renderMonthWeekdayRow() {
     monthWeekdayRowEl.innerHTML = '';
@@ -1467,6 +1533,8 @@
   const habitTimeInput = document.getElementById('habit-time-input');
   const habitRemindWrap = document.getElementById('habit-remind-wrap');
   const habitRemindEnabled = document.getElementById('habit-remind-enabled');
+  const habitStartDateInput = document.getElementById('habit-start-date');
+  habitStartDateInput.value = todayKey();
 
   function updateHabitFormFreqUI() {
     const type = habitFreqType.value;
@@ -1499,7 +1567,8 @@
     const frequency = frequencyFromSelectAndInputs(habitFreqType.value, habitFreqCount, habitFreqDaysWrap, habitFreqWeeklyDaysChips);
     const time = habitTimeInput.value || null;
     const reminder = { enabled: !!time && habitRemindEnabled.checked };
-    state.habits.push({ id: uid(), name, frequency, time, reminder });
+    const startDate = habitStartDateInput.value || null;
+    state.habits.push({ id: uid(), name, frequency, time, reminder, startDate });
     save();
     habitForm.reset();
     habitFreqCountWrap.hidden = true;
@@ -1508,6 +1577,7 @@
     habitFreqWeeklyDaysWrap.hidden = true;
     habitFreqWeeklyDaysChips.innerHTML = '';
     habitRemindWrap.hidden = true;
+    habitStartDateInput.value = todayKey();
     renderHabits();
     habitNameInput.focus();
   });
@@ -1556,20 +1626,25 @@
     }
 
     const viewedWeekday = fromDateKey(selectedDate).getDay();
-    // Habits not scheduled for this weekday are omitted entirely, except one
-    // currently being edited (so an in-progress edit never vanishes mid-change).
-    const visibleHabits = state.habits.filter(habit => isHabitScheduledOnWeekday(habit, viewedWeekday) || editingHabitId === habit.id);
+    // Habits not scheduled for this weekday, or not yet started as of the viewed
+    // day, are omitted entirely — except one currently being edited (so an
+    // in-progress edit never vanishes mid-change).
+    const visibleHabits = state.habits.filter(habit =>
+      (isHabitScheduledOnWeekday(habit, viewedWeekday) && hasHabitStarted(habit, selectedDate)) || editingHabitId === habit.id
+    );
     if (visibleHabits.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = 'Nothing scheduled for this day.';
+      empty.textContent = state.habits.some(h => h.startDate && h.startDate > selectedDate)
+        ? 'Nothing scheduled for this day — some habits start later.'
+        : 'Nothing scheduled for this day.';
       habitsListEl.appendChild(empty);
       return;
     }
 
     const entries = visibleHabits.map(habit => ({
       habit,
-      doneToday: isHabitScheduledOnWeekday(habit, viewedWeekday) && isDone(habit.id, selectedDate),
+      doneToday: isHabitScheduledOnWeekday(habit, viewedWeekday) && hasHabitStarted(habit, selectedDate) && isDone(habit.id, selectedDate),
     }));
     entries.sort((a, b) => (a.doneToday === b.doneToday) ? 0 : (a.doneToday ? 1 : -1));
 
@@ -1580,18 +1655,48 @@
       node.classList.toggle('editing', editing);
       node.classList.toggle('completed', doneToday);
 
-      const isScheduledToday = isHabitScheduledOnWeekday(habit, viewedWeekday);
+      const startedByViewedDate = hasHabitStarted(habit, selectedDate);
+      const isScheduledToday = isHabitScheduledOnWeekday(habit, viewedWeekday) && startedByViewedDate;
       node.classList.toggle('not-scheduled', !isScheduledToday);
+      const notScheduledLabel = node.querySelector('.habit-not-scheduled');
+      if (notScheduledLabel) notScheduledLabel.textContent = !startedByViewedDate ? `Starts ${formatDueDate(habit.startDate)}` : 'Not scheduled today';
 
       node.querySelector('.habit-name').textContent = habit.name;
       node.querySelector('.habit-freq-badge').textContent = freqBadgeText(habit.frequency);
       node.querySelector('.habit-time-badge').textContent = habit.time ? formatTimeShort(habit.time) : '';
+      const startBadge = node.querySelector('.habit-start-badge');
+      startBadge.textContent = habit.startDate ? `From ${formatDueDate(habit.startDate)}` : '';
 
       const checkbox = node.querySelector('.habit-checkbox');
       checkbox.checked = doneToday;
       checkbox.disabled = !isScheduledToday;
       checkbox.addEventListener('change', e => {
         setDone(habit.id, selectedDate, e.target.checked);
+        renderHabits();
+      });
+
+      const countInput = node.querySelector('.habit-count-input');
+      const count = getHabitCount(habit.id, selectedDate);
+      countInput.value = count > 0 ? count : 1;
+      countInput.hidden = !doneToday;
+      countInput.addEventListener('change', () => {
+        setHabitCount(habit.id, selectedDate, parseInt(countInput.value, 10) || 1);
+        renderHabits();
+      });
+
+      const note = getHabitNote(habit.id, selectedDate);
+      const noteToggle = node.querySelector('.habit-note-toggle');
+      const noteInput = node.querySelector('.habit-note-input');
+      noteToggle.textContent = note ? 'Note' : '+ Note';
+      noteToggle.classList.toggle('has-note', !!note);
+      noteInput.value = note;
+      noteInput.hidden = !note;
+      noteToggle.addEventListener('click', () => {
+        noteInput.hidden = !noteInput.hidden;
+        if (!noteInput.hidden) noteInput.focus();
+      });
+      noteInput.addEventListener('blur', () => {
+        setHabitNote(habit.id, selectedDate, noteInput.value);
         renderHabits();
       });
 
@@ -1615,6 +1720,7 @@
         const timeInput = node.querySelector('.habit-edit-time');
         const remindWrap = node.querySelector('.habit-edit-remind-wrap');
         const remindEnabled = node.querySelector('.habit-edit-remind-enabled');
+        const startDateInput = node.querySelector('.habit-edit-start-date');
 
         countInput.value = habit.frequency.type === 'weekly' ? habit.frequency.timesPerWeek : 1;
         countWrap.hidden = habit.frequency.type !== 'weekly';
@@ -1623,6 +1729,7 @@
         buildWeekdayChips(daysWrap, habit.frequency.type === 'days' ? habit.frequency.days : [viewedWeekday], 1);
         buildWeekdayChips(weeklyDaysChips, habit.frequency.type === 'weekly' ? (habit.frequency.days || []) : [], 0);
 
+        startDateInput.value = habit.startDate || '';
         timeInput.value = habit.time || '';
         remindWrap.hidden = !habit.time;
         remindEnabled.checked = !!(habit.reminder && habit.reminder.enabled);
@@ -1646,6 +1753,7 @@
           habit.frequency = frequencyFromSelectAndInputs(freqTypeSel.value, countInput, daysWrap, weeklyDaysChips);
           habit.time = timeInput.value || null;
           habit.reminder = { enabled: !!habit.time && remindEnabled.checked };
+          habit.startDate = startDateInput.value || null;
           save();
           editingHabitId = null;
           renderHabits();
