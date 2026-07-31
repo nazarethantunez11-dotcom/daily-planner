@@ -59,7 +59,7 @@
       daily('Vocabulary review'),
       weekly('Workout', 4),
       daily('Sleeping 7–8 hours'),
-      weekly('Hair removal session', 1),
+      daily('Hair removal session'),
       daily('Reading about finance'),
       weekly('Laundry', 1),
       weekly('Cleaning room', 1),
@@ -418,8 +418,15 @@
       if (h.frequency.type === 'days' && !Array.isArray(h.frequency.days)) h.frequency.days = [new Date().getDay()];
       if (h.frequency.type === 'weekly' && !Array.isArray(h.frequency.days)) h.frequency.days = [];
       if (h.time === undefined) h.time = null;
-      if (h.startDate === undefined) h.startDate = null;
+      // A habit with no start date used to mean "always shown, including every
+      // past day." Habits should only ever apply from a definite date forward,
+      // so anything without one starts today rather than retroactively.
+      if (!h.startDate) h.startDate = todayKey();
       if (!h.reminder) h.reminder = { enabled: false };
+      // The default "Hair removal session" habit used to be a 1x/week target,
+      // which showed a "0 of 1 this week" stat that doesn't fit how it's
+      // actually tracked (checked off + counted per day).
+      if (h.name === 'Hair removal session' && h.frequency.type === 'weekly') h.frequency = { type: 'daily' };
     });
 
     const assignments = (parsed && Array.isArray(parsed.assignments)) ? parsed.assignments : [];
