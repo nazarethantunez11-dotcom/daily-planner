@@ -8,12 +8,12 @@ import { getFirestore, doc, setDoc, getDoc, onSnapshot, enableIndexedDbPersisten
 // Firestore security rules instead. Sync stays off (silently, no errors) until
 // this is filled in.
 const FIREBASE_CONFIG = {
-  apiKey: 'REPLACE_ME',
-  authDomain: 'REPLACE_ME.firebaseapp.com',
-  projectId: 'REPLACE_ME',
-  storageBucket: 'REPLACE_ME.appspot.com',
-  messagingSenderId: 'REPLACE_ME',
-  appId: 'REPLACE_ME',
+  apiKey: 'AIzaSyCP8Fe1_ODL9mhobeDcfTUoszQz7CAlNmQ',
+  authDomain: 'planner-30940.firebaseapp.com',
+  projectId: 'planner-30940',
+  storageBucket: 'planner-30940.firebasestorage.app',
+  messagingSenderId: '73169354353',
+  appId: '1:73169354353:web:e4294362eb791616c825d0',
 };
 
 (() => {
