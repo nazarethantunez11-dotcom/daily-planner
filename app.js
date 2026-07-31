@@ -1,3 +1,21 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
+
+// Fill these in from your Firebase project's Settings > General > Your apps > SDK
+// setup and configuration. These values are not secret — they identify which
+// Firebase project to talk to, not a credential — access control lives in the
+// Firestore security rules instead. Sync stays off (silently, no errors) until
+// this is filled in.
+const FIREBASE_CONFIG = {
+  apiKey: 'REPLACE_ME',
+  authDomain: 'REPLACE_ME.firebaseapp.com',
+  projectId: 'REPLACE_ME',
+  storageBucket: 'REPLACE_ME.appspot.com',
+  messagingSenderId: 'REPLACE_ME',
+  appId: 'REPLACE_ME',
+};
+
 (() => {
   'use strict';
 
@@ -363,6 +381,92 @@
     return events;
   }
 
+  // Normalizes a raw state-shaped object — filling in defaults, migrating old
+  // field shapes — regardless of whether it came from localStorage or a
+  // remote sync snapshot. Both loadState() and the sync listener funnel
+  // through this so a device on slightly older/newer code never chokes on
+  // the other's data.
+  function normalizeState(raw) {
+    const src = raw || {};
+
+    const events = (Array.isArray(src.events) ? src.events : []).map(ev => ({
+      id: ev.id || uid(),
+      title: ev.title || 'Untitled',
+      allDay: !!ev.allDay,
+      date: ev.date,
+      start: ev.allDay ? null : (ev.start || '09:00'),
+      end: ev.allDay ? null : (ev.end || '10:00'),
+      location: ev.location || '',
+      description: ev.description || '',
+      color: ev.color || null,
+      reminder: ev.reminder ? { enabled: !!ev.reminder.enabled, minutesBefore: ev.reminder.minutesBefore ?? 10 } : { enabled: false, minutesBefore: 10 },
+      repeat: ev.repeat && ev.repeat.type ? { type: ev.repeat.type, days: ev.repeat.days || [], until: ev.repeat.until || null } : { type: 'none', days: [], until: null },
+      exceptions: Array.isArray(ev.exceptions) ? ev.exceptions : [],
+    }));
+
+    const habits = Array.isArray(src.habits) ? src.habits : buildDefaultHabits();
+    habits.forEach(h => {
+      if (!h.frequency) h.frequency = { type: 'daily' };
+      if (h.frequency.type === 'days' && !Array.isArray(h.frequency.days)) h.frequency.days = [new Date().getDay()];
+      if (h.frequency.type === 'weekly' && !Array.isArray(h.frequency.days)) h.frequency.days = [];
+      if (h.time === undefined) h.time = null;
+      // A habit with no start date used to mean "always shown, including every
+      // past day." Habits should only ever apply from a definite date forward,
+      // so anything without one starts today rather than retroactively.
+      if (!h.startDate) h.startDate = todayKey();
+      if (!h.reminder) h.reminder = { enabled: false };
+      // The default "Hair removal session" habit used to be a 1x/week target,
+      // which showed a "0 of 1 this week" stat that doesn't fit how it's
+      // actually tracked (checked off + counted per day).
+      if (h.name === 'Hair removal session' && h.frequency.type === 'weekly') h.frequency = { type: 'daily' };
+    });
+
+    const assignments = Array.isArray(src.assignments) ? src.assignments : [];
+    assignments.forEach(a => {
+      if (a.link === undefined) a.link = '';
+      if (a.attachment === undefined) a.attachment = null;
+      if (a.color === undefined) a.color = null;
+      if (!a.reminder) a.reminder = { enabled: false, daysBefore: 0 };
+    });
+
+    const todos = Array.isArray(src.todos) ? src.todos : [];
+    todos.forEach(t => {
+      if (t.date === undefined) t.date = null;
+      if (t.color === undefined) t.color = null;
+      if (t.done === undefined) t.done = false;
+    });
+
+    const habitLogs = src.habitLogs || {};
+    Object.keys(habitLogs).forEach(dateKey => {
+      const day = habitLogs[dateKey];
+      Object.keys(day).forEach(habitId => {
+        const entry = day[habitId];
+        if (entry === true) {
+          day[habitId] = { done: true, count: 1, note: '' };
+        } else if (entry && typeof entry === 'object') {
+          if (entry.done === undefined) entry.done = true;
+          if (entry.count === undefined) entry.count = 1;
+          if (entry.note === undefined) entry.note = '';
+        } else {
+          delete day[habitId];
+        }
+      });
+    });
+
+    return {
+      events,
+      habits,
+      habitLogs,
+      assignments,
+      todos,
+      periodLogs: src.periodLogs || {},
+      scheduleView: ['day', 'week', 'month', 'year'].includes(src.scheduleView) ? src.scheduleView : 'day',
+      assignmentsView: src.assignmentsView || 'list',
+      firedReminders: src.firedReminders || {},
+      updatedAt: src.updatedAt || 0,
+    };
+  }
+
   function loadState() {
     let raw = null;
     try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { /* storage unavailable */ }
@@ -397,81 +501,8 @@
           }))
         : [];
     }
-    events = events.map(ev => ({
-      id: ev.id || uid(),
-      title: ev.title || 'Untitled',
-      allDay: !!ev.allDay,
-      date: ev.date,
-      start: ev.allDay ? null : (ev.start || '09:00'),
-      end: ev.allDay ? null : (ev.end || '10:00'),
-      location: ev.location || '',
-      description: ev.description || '',
-      color: ev.color || null,
-      reminder: ev.reminder ? { enabled: !!ev.reminder.enabled, minutesBefore: ev.reminder.minutesBefore ?? 10 } : { enabled: false, minutesBefore: 10 },
-      repeat: ev.repeat && ev.repeat.type ? { type: ev.repeat.type, days: ev.repeat.days || [], until: ev.repeat.until || null } : { type: 'none', days: [], until: null },
-      exceptions: Array.isArray(ev.exceptions) ? ev.exceptions : [],
-    }));
 
-    const habits = (parsed && Array.isArray(parsed.habits)) ? parsed.habits : buildDefaultHabits();
-    habits.forEach(h => {
-      if (!h.frequency) h.frequency = { type: 'daily' };
-      if (h.frequency.type === 'days' && !Array.isArray(h.frequency.days)) h.frequency.days = [new Date().getDay()];
-      if (h.frequency.type === 'weekly' && !Array.isArray(h.frequency.days)) h.frequency.days = [];
-      if (h.time === undefined) h.time = null;
-      // A habit with no start date used to mean "always shown, including every
-      // past day." Habits should only ever apply from a definite date forward,
-      // so anything without one starts today rather than retroactively.
-      if (!h.startDate) h.startDate = todayKey();
-      if (!h.reminder) h.reminder = { enabled: false };
-      // The default "Hair removal session" habit used to be a 1x/week target,
-      // which showed a "0 of 1 this week" stat that doesn't fit how it's
-      // actually tracked (checked off + counted per day).
-      if (h.name === 'Hair removal session' && h.frequency.type === 'weekly') h.frequency = { type: 'daily' };
-    });
-
-    const assignments = (parsed && Array.isArray(parsed.assignments)) ? parsed.assignments : [];
-    assignments.forEach(a => {
-      if (a.link === undefined) a.link = '';
-      if (a.attachment === undefined) a.attachment = null;
-      if (a.color === undefined) a.color = null;
-      if (!a.reminder) a.reminder = { enabled: false, daysBefore: 0 };
-    });
-
-    const todos = (parsed && Array.isArray(parsed.todos)) ? parsed.todos : [];
-    todos.forEach(t => {
-      if (t.date === undefined) t.date = null;
-      if (t.color === undefined) t.color = null;
-      if (t.done === undefined) t.done = false;
-    });
-
-    const habitLogs = (parsed && parsed.habitLogs) ? parsed.habitLogs : {};
-    Object.keys(habitLogs).forEach(dateKey => {
-      const day = habitLogs[dateKey];
-      Object.keys(day).forEach(habitId => {
-        const entry = day[habitId];
-        if (entry === true) {
-          day[habitId] = { done: true, count: 1, note: '' };
-        } else if (entry && typeof entry === 'object') {
-          if (entry.done === undefined) entry.done = true;
-          if (entry.count === undefined) entry.count = 1;
-          if (entry.note === undefined) entry.note = '';
-        } else {
-          delete day[habitId];
-        }
-      });
-    });
-
-    return {
-      events,
-      habits,
-      habitLogs,
-      assignments,
-      todos,
-      periodLogs: (parsed && parsed.periodLogs) ? parsed.periodLogs : {},
-      scheduleView: (parsed && ['day', 'week', 'month', 'year'].includes(parsed.scheduleView)) ? parsed.scheduleView : 'day',
-      assignmentsView: (parsed && parsed.assignmentsView) ? parsed.assignmentsView : 'list',
-      firedReminders: (parsed && parsed.firedReminders) ? parsed.firedReminders : {},
-    };
+    return normalizeState({ ...(parsed || {}), events });
   }
 
   let state = loadState();
@@ -490,8 +521,10 @@
   }
 
   function save() {
+    state.updatedAt = Date.now();
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      scheduleSyncPush();
       return true;
     } catch (e) {
       showToast("Couldn't save — your device's storage is full. Try removing a large attachment.", true);
@@ -2432,12 +2465,242 @@
 
   renderPeriodWeekdayRow();
 
+  function renderEverything() {
+    renderSchedule();
+    renderHabits();
+    renderAssignments();
+    renderTodos();
+    renderPeriod();
+  }
+
+  // ================= SYNC =================
+  const SYNC_ID_KEY = 'planner.syncId';
+  let firebaseApp = null, firebaseAuth = null, firestoreDb = null;
+  let authReadyPromise = null;
+  let unsubscribeSnapshot = null;
+  let applyingRemoteUpdate = false;
+  let pushTimer = null;
+
+  const syncToggleBtn = document.getElementById('sync-toggle');
+  const syncModalOverlay = document.getElementById('sync-modal-overlay');
+  const syncCloseBtn = document.getElementById('sync-close-btn');
+  const syncStepOff = document.getElementById('sync-step-off');
+  const syncStepOn = document.getElementById('sync-step-on');
+  const syncStartBtn = document.getElementById('sync-start-btn');
+  const syncJoinInput = document.getElementById('sync-join-input');
+  const syncJoinBtn = document.getElementById('sync-join-btn');
+  const syncCodeDisplay = document.getElementById('sync-code-display');
+  const syncCopyBtn = document.getElementById('sync-copy-btn');
+  const syncStatusText = document.getElementById('sync-status-text');
+  const syncStopBtn = document.getElementById('sync-stop-btn');
+
+  function isFirebaseConfigured() {
+    return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'REPLACE_ME');
+  }
+  function getSyncId() {
+    try { return localStorage.getItem(SYNC_ID_KEY); } catch (e) { return null; }
+  }
+  function setSyncId(id) {
+    try { id ? localStorage.setItem(SYNC_ID_KEY, id) : localStorage.removeItem(SYNC_ID_KEY); } catch (e) { /* ignore */ }
+  }
+  function genSyncId() {
+    return (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+  }
+  function plannerDocRef(id) { return doc(firestoreDb, 'planners', id); }
+  function setSyncSpinning(on) { syncToggleBtn.classList.toggle('syncing-now', on); }
+
+  async function ensureFirebaseReady() {
+    if (!isFirebaseConfigured()) throw new Error('sync-not-configured');
+    if (!authReadyPromise) {
+      authReadyPromise = (async () => {
+        firebaseApp = initializeApp(FIREBASE_CONFIG);
+        firestoreDb = getFirestore(firebaseApp);
+        try { await enableIndexedDbPersistence(firestoreDb); } catch (e) { /* multiple tabs open, or unsupported — fine without offline cache */ }
+        firebaseAuth = getAuth(firebaseApp);
+        await new Promise((resolve, reject) => {
+          const unsub = onAuthStateChanged(firebaseAuth, user => { if (user) { unsub(); resolve(); } }, reject);
+          signInAnonymously(firebaseAuth).catch(reject);
+        });
+      })();
+    }
+    return authReadyPromise;
+  }
+
+  function buildSyncPayload() {
+    const clone = JSON.parse(JSON.stringify(state));
+    // Attachments carry base64 file data that can easily blow past Firestore's
+    // 1MB document limit, so they stay local to whichever device added them.
+    (clone.assignments || []).forEach(a => {
+      if (a.attachment && a.attachment.dataUrl) {
+        a.attachment = { name: a.attachment.name, type: a.attachment.type, dataUrl: null };
+      }
+    });
+    return clone;
+  }
+
+  function formatSyncedStatus() {
+    if (!state.updatedAt) return 'Waiting for first sync…';
+    const secs = Math.round((Date.now() - state.updatedAt) / 1000);
+    if (secs < 5) return 'Synced just now';
+    if (secs < 60) return `Synced ${secs}s ago`;
+    const mins = Math.round(secs / 60);
+    if (mins < 60) return `Synced ${mins}m ago`;
+    return `Last synced ${new Date(state.updatedAt).toLocaleString()}`;
+  }
+
+  function renderSyncUI() {
+    const syncId = getSyncId();
+    syncToggleBtn.classList.toggle('active', !!syncId);
+    syncStepOff.hidden = !!syncId;
+    syncStepOn.hidden = !syncId;
+    if (syncId) {
+      syncCodeDisplay.textContent = syncId;
+      syncStatusText.textContent = formatSyncedStatus();
+    }
+  }
+
+  async function pushNow() {
+    const syncId = getSyncId();
+    if (!syncId) return;
+    try {
+      await ensureFirebaseReady();
+      setSyncSpinning(true);
+      await setDoc(plannerDocRef(syncId), buildSyncPayload());
+      renderSyncUI();
+    } catch (e) {
+      syncStatusText.textContent = 'Sync failed — will retry on the next change.';
+    } finally {
+      setSyncSpinning(false);
+    }
+  }
+
+  function scheduleSyncPush() {
+    if (!getSyncId() || applyingRemoteUpdate || !isFirebaseConfigured()) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushNow, 900);
+  }
+
+  async function startRemoteListener() {
+    const syncId = getSyncId();
+    if (!syncId) return;
+    try {
+      await ensureFirebaseReady();
+    } catch (e) {
+      syncStatusText.textContent = "Couldn't connect — check your connection.";
+      return;
+    }
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
+    unsubscribeSnapshot = onSnapshot(plannerDocRef(syncId), snap => {
+      if (!snap.exists()) return;
+      const remote = snap.data();
+      if (remote.updatedAt && state.updatedAt && remote.updatedAt <= state.updatedAt) {
+        renderSyncUI();
+        return; // this is our own write echoing back, or an older/duplicate update
+      }
+      setSyncSpinning(true);
+      applyingRemoteUpdate = true;
+      state = normalizeState(remote);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      renderEverything();
+      applyingRemoteUpdate = false;
+      setSyncSpinning(false);
+      renderSyncUI();
+    }, () => {
+      syncStatusText.textContent = 'Sync connection lost — will retry automatically.';
+    });
+  }
+
+  async function startSyncing() {
+    try {
+      await ensureFirebaseReady();
+    } catch (e) {
+      showToast("Couldn't connect to sync — check your connection and try again.", true);
+      return;
+    }
+    setSyncId(genSyncId());
+    save();
+    await pushNow();
+    await startRemoteListener();
+    renderSyncUI();
+  }
+
+  async function joinSyncing(code) {
+    code = code.trim();
+    if (!code) return;
+    try {
+      await ensureFirebaseReady();
+    } catch (e) {
+      showToast("Couldn't connect to sync — check your connection and try again.", true);
+      return;
+    }
+    let snap;
+    try {
+      snap = await getDoc(plannerDocRef(code));
+    } catch (e) {
+      showToast("Couldn't reach that sync code — check your connection and try again.", true);
+      return;
+    }
+    if (!snap.exists()) {
+      showToast('No synced data found for that code — double check it.', true);
+      return;
+    }
+    if (!confirm('This replaces everything on this device with the synced data. Continue?')) return;
+    setSyncId(code);
+    applyingRemoteUpdate = true;
+    state = normalizeState(snap.data());
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    renderEverything();
+    applyingRemoteUpdate = false;
+    await startRemoteListener();
+    renderSyncUI();
+    showToast('Synced!');
+  }
+
+  function stopSyncing() {
+    setSyncId(null);
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    renderSyncUI();
+  }
+
+  function closeSyncModal() {
+    syncModalOverlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+  syncToggleBtn.addEventListener('click', () => {
+    renderSyncUI();
+    syncModalOverlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+  });
+  syncCloseBtn.addEventListener('click', closeSyncModal);
+  syncModalOverlay.addEventListener('click', e => { if (e.target === syncModalOverlay) closeSyncModal(); });
+  syncStartBtn.addEventListener('click', async () => {
+    syncStartBtn.disabled = true;
+    const original = syncStartBtn.textContent;
+    syncStartBtn.textContent = 'Starting…';
+    await startSyncing();
+    syncStartBtn.disabled = false;
+    syncStartBtn.textContent = original;
+  });
+  syncJoinBtn.addEventListener('click', async () => {
+    syncJoinBtn.disabled = true;
+    await joinSyncing(syncJoinInput.value);
+    syncJoinInput.value = '';
+    syncJoinBtn.disabled = false;
+  });
+  syncCopyBtn.addEventListener('click', () => {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(syncCodeDisplay.textContent).then(() => showToast('Code copied')).catch(() => {});
+  });
+  syncStopBtn.addEventListener('click', () => {
+    if (!confirm('Stop syncing on this device? Your other devices will keep syncing with each other.')) return;
+    stopSyncing();
+    closeSyncModal();
+  });
+
   // ---------- init ----------
-  renderSchedule();
-  renderHabits();
-  renderAssignments();
-  renderTodos();
-  renderPeriod();
+  renderEverything();
+  renderSyncUI();
+  if (getSyncId() && isFirebaseConfigured()) startRemoteListener().catch(() => {});
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

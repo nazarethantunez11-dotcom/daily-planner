@@ -100,6 +100,25 @@ html, body {
 .notif-toggle.granted { filter: none; border-color: var(--accent); background: var(--accent-bg); }
 .notif-toggle.denied { filter: grayscale(1) opacity(0.3); cursor: not-allowed; }
 
+.sync-toggle {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink-faint);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.sync-toggle:hover { border-color: var(--ink-faint); color: var(--ink-soft); }
+.sync-toggle.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-strong); }
+.sync-toggle-icon { font-size: 15px; line-height: 1; display: inline-block; }
+.sync-toggle.syncing-now .sync-toggle-icon { animation: sync-spin 0.9s linear infinite; }
+@keyframes sync-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 /* Tabs */
 .tabs {
   display: flex;
@@ -863,6 +882,55 @@ html, body {
 
 /* ---------- Import modal ---------- */
 .import-modal { max-width: 560px; }
+
+.sync-modal { max-width: 440px; }
+#sync-start-btn { margin-bottom: 4px; }
+
+.sync-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sync-divider::before, .sync-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+.sync-join-row { display: flex; gap: 8px; margin-top: 6px; }
+.sync-join-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  padding: 10px 12px;
+}
+.sync-join-row input::placeholder { color: var(--ink-faint); }
+
+.sync-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.sync-code {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  color: var(--ink);
+  word-break: break-all;
+}
+.sync-status { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 18px; }
 .import-title {
   font-family: var(--font-serif);
   font-size: 20px;

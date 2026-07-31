@@ -33,6 +33,9 @@
       <h1>The Day</h1>
     </div>
     <div class="header-right">
+      <button type="button" class="sync-toggle" id="sync-toggle" title="Sync across devices" aria-label="Sync across devices">
+        <span class="sync-toggle-icon">⟲</span>
+      </button>
       <button type="button" class="notif-toggle" id="notif-toggle" title="Enable notifications" aria-label="Toggle notifications">🔔</button>
       <div class="header-date" id="header-date"></div>
     </div>
@@ -367,6 +370,42 @@
   </div>
 </div>
 
+<!-- Sync modal -->
+<div class="modal-overlay" id="sync-modal-overlay" hidden>
+  <div class="modal sync-modal" role="dialog" aria-modal="true" aria-label="Sync across devices">
+    <button type="button" class="modal-close" id="sync-close-btn" aria-label="Close">×</button>
+
+    <div id="sync-step-off">
+      <h3 class="import-title">Sync across devices</h3>
+      <p class="import-help">Turn this on here, then enter the same code on your other devices to keep them all up to date automatically. Anyone with the code can read and write this data, so treat it like a password.</p>
+
+      <button type="button" class="btn-solid" id="sync-start-btn">Start Syncing This Device</button>
+
+      <div class="sync-divider"><span>or</span></div>
+
+      <label class="ev-label" for="sync-join-input">Already have a code?</label>
+      <div class="sync-join-row">
+        <input type="text" id="sync-join-input" placeholder="Paste sync code">
+        <button type="button" class="btn-ghost" id="sync-join-btn">Join</button>
+      </div>
+    </div>
+
+    <div id="sync-step-on" hidden>
+      <h3 class="import-title">Syncing is on</h3>
+      <p class="import-help">Enter this code on your other devices to bring them into sync. Keep it private.</p>
+
+      <div class="sync-code-row">
+        <code class="sync-code" id="sync-code-display"></code>
+        <button type="button" class="btn-ghost" id="sync-copy-btn">Copy</button>
+      </div>
+
+      <p class="sync-status" id="sync-status-text"></p>
+
+      <button type="button" class="btn-text danger" id="sync-stop-btn">Stop Syncing on This Device</button>
+    </div>
+  </div>
+</div>
+
 <template id="tpl-import-row">
   <div class="import-row">
     <input type="checkbox" class="import-row-check" checked>
@@ -520,6 +559,6 @@
   </section>
 </template>
 
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
